@@ -28,7 +28,7 @@ let undefined g = make g Undefined Any
 let const g v = make g (Const v) Float
 let pure g v = make g (Pure (Some v)) Any
 let input g = make g Input Float
-let tick g = make g Tick Float
+let ginput g = make g Input Any
 
 (* constant folding: an operation on constants is itself a constant *)
 let map g f a = make g (Map (f, a)) Float

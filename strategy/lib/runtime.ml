@@ -9,8 +9,14 @@ type src =
   | F of int (* float slot *)
   | E of int (* effect slot *)
 
+let src_of : type a. a signal -> src =
+  fun s ->
+  match s.kind with
+  | Float -> F s.id
+  | Any -> E s.id
+;;
+
 type instr =
-  | ITick of int (* dst slot *)
   | IPrev of
       int * int (* float_curs.(d) <- float_prevs.(s): Pre, Knot *)
   | IPrevE of int * int (* effect_curs.(d) <- effect_curs.(s): Pre *)
@@ -28,7 +34,7 @@ type t =
   ; mutable float_prevs : float array
   ; mutable effect_curs : Obj.t array
   ; mutable effect_prevs : Obj.t array
-  ; input_ids : int array
+  ; inputs : src array
   ; graph_id : int
   }
 
@@ -36,24 +42,25 @@ let compile (g : Graph.t) =
   (* Array of all signals that are part of G *)
   let signals = Array.of_list g.ctx.registry in
   Array.stable_sort
-    (fun (Any l) (Any r) -> compare l.rank r.rank)
+    (fun (Packed l) (Packed r) -> compare l.rank r.rank)
     signals;
-  (* ids of all input signals *)
-  let input_ids =
+  (* srcs of all input signals; ids alone are ambiguous, being dense per
+     kind, so inputs are tracked as kind-tagged slots *)
+  let inputs =
     Array.fold_left
-      (fun ids (Any s) ->
+      (fun srcs (Packed s) ->
          match s.def with
-         | Input -> s.id :: ids
-         | _ -> ids)
+         | Input -> src_of s :: srcs
+         | _ -> srcs)
       []
       signals
     |> Array.of_list
   in
   (* wire each knot to the loop that owns it *)
   Array.iter
-    (fun (Any s) ->
+    (fun (Packed s) ->
        match s.def with
-       | Rec (knot, _) -> knot.knot_target <- Some (Obj.magic s)
+       | Rec (knot, _) -> knot.knot_target <- Some s
        | _ -> ())
     signals;
   (* a float-typed operand may still be an effect-kind node (e.g. one built
@@ -75,16 +82,10 @@ let compile (g : Graph.t) =
          Hashtbl.add coercions s.id slot;
          slot, [ IUnbox (slot, s.id) ])
   in
-  let src_of : type a. a signal -> src =
-    fun s ->
-    match s.kind with
-    | Float -> F s.id
-    | Any -> E s.id
-  in
   let instrs =
     List.rev
       (Array.fold_left
-         (fun acc (Any s) ->
+         (fun acc (Packed s) ->
             match s.def with
             | Undefined -> acc
             | Const v ->
@@ -92,7 +93,6 @@ let compile (g : Graph.t) =
               consts := (s.id, v) :: !consts;
               acc
             | Input -> acc
-            | Tick -> ITick s.id :: acc
             | Pre src ->
               (match s.kind with
                | Float -> IPrev (s.id, src.id) :: acc
@@ -156,7 +156,7 @@ let compile (g : Graph.t) =
   ; float_prevs
   ; effect_curs
   ; effect_prevs
-  ; input_ids
+  ; inputs
   ; graph_id = g.id
   }
 ;;
@@ -170,11 +170,6 @@ let read_src r = function
 
 let exec r instr =
   match instr with
-  | ITick d ->
-    r.float_curs.(d)
-    <- (match r.float_prevs.(d) with
-        | n when Float.is_nan n -> 0.
-        | n -> n +. 1.)
   | IPrev (d, s) -> r.float_curs.(d) <- r.float_prevs.(s)
   | IPrevE (d, s) -> r.effect_curs.(d) <- r.effect_prevs.(s)
   | ICopy (d, s) -> r.float_curs.(d) <- r.float_curs.(s)
@@ -191,7 +186,7 @@ let exec r instr =
     r.effect_curs.(d) <- f (read_src r a) (read_src r b)
 ;;
 
-type set = Set : float signal * float -> set
+type set = Set : 'a signal * 'a -> set
 
 let step r setters =
   (* validate first: a failing step leaves the runtime state untouched *)
@@ -205,11 +200,19 @@ let step r setters =
     setters;
   if
     Array.exists
-      (fun id ->
-         not (List.exists (fun (Set (s, _)) -> s.id = id) setters))
-      r.input_ids
+      (fun src ->
+         not
+           (List.exists
+              (fun (Set (s, _)) ->
+                 (* no [src_of]/[=]: those allocate a variant per compare *)
+                 match src, s.kind with
+                 | F i, Float -> s.id = i
+                 | E i, Any -> s.id = i
+                 | _ -> false)
+              setters))
+      r.inputs
   then failwith "step: all inputs must be set";
-  if Array.length r.input_ids <> List.length setters
+  if Array.length r.inputs <> List.length setters
   then failwith "step: an input is set more than once"
   else (
     (* rotate buffers: every node's last-bar cur becomes its prev *)
@@ -219,7 +222,12 @@ let step r setters =
     r.float_prevs <- fc;
     r.effect_curs <- r.effect_prevs;
     r.effect_prevs <- ec;
-    List.iter (fun (Set (s, v)) -> r.float_curs.(s.id) <- v) setters;
+    List.iter
+      (fun (Set (s, v)) ->
+         match s.kind with
+         | Float -> r.float_curs.(s.id) <- v
+         | Any -> r.effect_curs.(s.id) <- Obj.repr (Some v))
+      setters;
     for i = 0 to Array.length r.instrs - 1 do
       exec r r.instrs.(i)
     done)

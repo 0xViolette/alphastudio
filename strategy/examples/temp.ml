@@ -20,8 +20,7 @@ let pp_float = function
 
 let pp_bool = function
   | None -> "None"
-  | Some 0. -> "false"
-  | Some _ -> "true"
+  | Some b -> if b then "true" else "false"
 ;;
 
 let value_option = function
@@ -40,7 +39,7 @@ let raw_over, raw_under =
   Indicator.crossover raw_fast raw_slow, Indicator.crossunder raw_fast raw_slow
 ;;
 
-Raw.compile ();;
+module RawM = (val Raw.compile ())
 
 let raw_probes = [| 1., 2.; 0., 2.; 3., 2.; 4., 2.; 2., 2.; 3., 2.; 1., 2.; 3., 2. |]
 
@@ -58,25 +57,25 @@ let raw_notes =
 
 let raw_expected_over =
   [| None
-   ; Some 0.
-   ; Some 1.
-   ; Some 0.
-   ; Some 0.
-   ; Some 0.
-   ; Some 0.
-   ; Some 1.
+   ; Some false
+   ; Some true
+   ; Some false
+   ; Some false
+   ; Some false
+   ; Some false
+   ; Some true
   |]
 ;;
 
 let raw_expected_under =
   [| None
-   ; Some 0.
-   ; Some 0.
-   ; Some 0.
-   ; Some 0.
-   ; Some 0.
-   ; Some 1.
-   ; Some 0.
+   ; Some false
+   ; Some false
+   ; Some false
+   ; Some false
+   ; Some false
+   ; Some true
+   ; Some false
   |]
 ;;
 
@@ -96,7 +95,7 @@ let fast, slow, cross_over, cross_under =
   fast, slow, cross_over, cross_under
 ;;
 
-Trend.compile ();;
+module TrendM = (val Trend.compile ())
 
 let prices =
   [| 5.; 6.; 7.; 8.; 9.; 10.; 9.; 8.; 7.; 6.; 5.; 4.; 5.; 6.; 7.; 8.; 9.; 10. |]
@@ -114,9 +113,9 @@ let () =
     "what happened";
   Array.iteri
     (fun i (f, s) ->
-       Raw.step [ Set (raw_fast, f); Set (raw_slow, s) ];
-       let over = Raw.value raw_over in
-       let under = Raw.value raw_under in
+       RawM.step [ Set (raw_fast, f); Set (raw_slow, s) ];
+       let over = RawM.value raw_over in
+       let under = RawM.value raw_under in
        let mark =
          if
            value_option over = raw_expected_over.(i)
@@ -146,29 +145,29 @@ let () =
   let buys = ref 0 in
   let sells = ref 0 in
   Array.iteri
-    (fun i p ->
-       Trend.step [ Set (close, p) ];
-       let co = Trend.value cross_over in
-       let cu = Trend.value cross_under in
-       let signal =
-         match value_option co, value_option cu with
-         | Some 1., _ ->
-           incr buys;
-           "  <-- GOLDEN CROSS (buy)"
-         | _, Some 1. ->
-           incr sells;
-           "  <-- DEATH CROSS (sell)"
-         | _ -> ""
-       in
-       Printf.printf
-         "%-4d %-6s %-6s %-6s %-9s %-9s%s\n"
-         i
-         (pp_float (Trend.value close))
-         (pp_float (Trend.value fast))
-         (pp_float (Trend.value slow))
-         (pp_bool co)
-         (pp_bool cu)
-         signal)
-    prices;
+     (fun i p ->
+        TrendM.step [ Set (close, p) ];
+        let co = TrendM.value cross_over in
+        let cu = TrendM.value cross_under in
+        let signal =
+          match value_option co, value_option cu with
+          | Some true, _ ->
+            incr buys;
+            "  <-- GOLDEN CROSS (buy)"
+          | _, Some true ->
+            incr sells;
+            "  <-- DEATH CROSS (sell)"
+          | _ -> ""
+        in
+        Printf.printf
+          "%-4d %-6s %-6s %-6s %-9s %-9s%s\n"
+          i
+          (pp_float (TrendM.value close))
+          (pp_float (TrendM.value fast))
+          (pp_float (TrendM.value slow))
+          (pp_bool co)
+          (pp_bool cu)
+          signal)
+     prices;
   Printf.printf "\nSummary: %d golden cross (buy), %d death cross (sell).\n" !buys !sells
 ;;

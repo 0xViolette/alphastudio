@@ -2,26 +2,14 @@ include Strategy_intf
 
 module Make () : S = struct
   type 'a signal = 'a Language.signal
-  type set = Runtime.set = Set : float signal * float -> set
+  type set = Runtime.set = Set : 'a signal * 'a -> set
 
   let g = Graph.create ()
-  let r = ref None
-
-  let step setters =
-    match !r with
-    | Some r -> Runtime.step r setters
-    | None -> failwith "forgot to compile"
-  ;;
-
-  let value s =
-    match !r with
-    | Some r -> Runtime.value r s
-    | None -> failwith "forgot to compile"
-  ;;
 
   let undefined () = Graph.undefined g
   let const x = Graph.const g x
   let input () = Graph.input g
+  let ginput () = Graph.ginput g
   let pre s = Graph.pre g s
 
   let rec delay n s =
@@ -80,9 +68,6 @@ module Make () : S = struct
 
   let read f = gmap (fun _ -> f ()) (undefined ())
 
-  (* booleans are floats: [0.] is false, anything else true, [nan] pending *)
-  let of_bool b = if b then 1. else 0.
-
   (*unary operations*)
   let neg = map Float.neg
   let abs = map Float.abs
@@ -138,12 +123,22 @@ module Make () : S = struct
     recurrence (fun prev -> cond event signal prev)
   ;;
 
+  module type MACHINE = sig
+    val step : set list -> unit
+    val value : 'a signal -> 'a option
+  end
+
   let compile () =
-    match !r with
-    | Some _ -> failwith "already compiled"
-    | None ->
+    if g.compiled
+    then failwith "already compiled"
+    else (
       g.compiled <- true;
-      r := Some (Runtime.compile g)
+      let r = Runtime.compile g in
+      let module R = struct
+        let step setters = Runtime.step r setters
+        let value s = Runtime.value r s
+      end in
+      (module R : MACHINE))
   ;;
 
   module Indicator = struct

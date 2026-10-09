@@ -136,9 +136,9 @@ let () =
     let open M in
     let inp = input () in
     let probe = Indicator.sma 3 inp in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -152,9 +152,9 @@ let () =
     let open M in
     let inp = input () in
     let probe = Indicator.ema 3 inp in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -169,9 +169,9 @@ let () =
     let open M in
     let inp = input () in
     let probe = Indicator.(ema 3 (sma 4 inp)) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -186,9 +186,9 @@ let () =
     let open Ops in
     let inp = input () in
     let probe = Indicator.(ema 3 (bars_since (inp > !5.))) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -201,9 +201,9 @@ let () =
     let open M in
     let inp = input () in
     let probe = Indicator.(ema 2 (ema 3 inp)) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -218,9 +218,9 @@ let () =
     let open Ops in
     let inp = input () in
     let probe = recurrence (fun p -> cond (is_pending p) !0. (p + !1.)) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -235,9 +235,9 @@ let () =
     let open Ops in
     let inp = input () in
     let probe = recurrence (fun p -> p + !1.) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -252,9 +252,9 @@ let () =
     let open Ops in
     let inp = input () in
     let probe = recurrence (fun p -> cond (is_pending p) inp (p + !1.)) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -269,9 +269,9 @@ let () =
     let inp = input () in
     let delayed = delay 2 inp in
     let probe = cond (is_pending delayed) (const 5.) delayed in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -285,9 +285,9 @@ let () =
     let open Ops in
     let inp = input () in
     let probe = recurrence (fun prev -> cond (inp > !5.) inp prev) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -301,9 +301,9 @@ let () =
     let open Ops in
     let inp = input () in
     let probe = recurrence (fun prev -> cond (is_pending prev) inp (prev + inp)) in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 
@@ -317,9 +317,29 @@ let () =
     let open M in
     let inp = input () in
     let probe = tick in
-    compile ();
-    { step_in = (fun x -> step [ Set (inp, x) ])
-    ; read = (fun () -> value_option (value probe))
+    let module R = (val compile ()) in
+    { step_in = (fun x -> R.step [ Set (inp, x) ])
+    ; read = (fun () -> value_option (R.value probe))
+    })
+;;
+
+(* 12. A bool stream enters the graph directly: [ginput] + the generic [Set]
+   let [cond]'s condition be an external input rather than a computed
+   signal. *)
+let () =
+  let xs = [| 1.; 3.; 2.; 4. |] in
+  let expected = [| Some (-9.); Some 13.; Some (-8.); Some 14. |] in
+  run "bool input via ginput" xs expected (fun m ->
+    let module M = (val m : Strategy_intf.S) in
+    let open M in
+    let open Ops in
+    let inp = input () in
+    let flag = ginput () in
+    let probe = cond flag (inp + !10.) (inp - !10.) in
+    let module R = (val compile ()) in
+    { step_in =
+        (fun x -> R.step [ Set (inp, x); Set (flag, Stdlib.( x > 2.5 )) ])
+    ; read = (fun () -> value_option (R.value probe))
     })
 ;;
 

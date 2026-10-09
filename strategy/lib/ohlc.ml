@@ -79,18 +79,12 @@ module Make () = struct
     order id (fun _ -> Order.Exit_short) (const 0.) kind when_
   ;;
 
-  type bar_report =
-    { bar : Codec.Ohlc.bar
-    ; fills : Order.fill list
-    ; placed : Order.request list
-    }
-
   let backtest
         ?(probes : (string * float signal) list = [])
         ?(on_bar = fun (_ : Report.t) -> ())
         (orders : Order.request signal list)
     =
-    compile ();
+    let module R = (val compile ()) in
     let rec loop (resting : Order.request list) bars =
       match bars () with
       | Seq.Nil -> prerr_endline "End of stream"
@@ -98,7 +92,7 @@ module Make () = struct
         Broker.start_bar broker bar;
         let fills = Oms.fill_resting_orders broker resting in
         Broker.end_bar broker;
-        step
+        R.step
           [ Set (open_, bar.open_)
           ; Set (high, bar.high)
           ; Set (low, bar.low)
@@ -111,7 +105,7 @@ module Make () = struct
           ; Set (Account.realised_pnl, Broker.realised_pnl broker)
           ];
         let submitted =
-          Oms.place_orders broker (List.filter_map value orders)
+          Oms.place_orders broker (List.filter_map R.value orders)
         in
         let is_new (d : Order.request) =
           Bool.not
@@ -123,7 +117,7 @@ module Make () = struct
           { Report.bar
           ; fills
           ; placed = List.filter is_new submitted
-          ; probes = List.map (fun (name, s) -> name, value s) probes
+          ; probes = List.map (fun (name, s) -> name, R.value s) probes
           };
         loop submitted rest
     in

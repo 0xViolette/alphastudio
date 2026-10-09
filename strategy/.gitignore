@@ -36,8 +36,7 @@ setup.log
 bin/temp*
 scripts/*
 scratch/*
-trade_data.XLS
-trades.csv
-out.csv
-pnl.png
-a.txt
+*.XLS
+*.csv
+*.png
+*.txt

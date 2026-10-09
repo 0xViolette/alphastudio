@@ -32,7 +32,7 @@ let pp_float = function
 
 let pp_bool = function
   | None -> "None"
-  | Some b -> if b <> 0. then "true" else "false"
+  | Some b -> if b then "true" else "false"
 ;;
 
 let value_option = function
@@ -58,7 +58,7 @@ let build m ~fixed =
     (* latch the fill price: on the shock bar take close, else keep prev *)
     let fill = recurrence (fun prev -> cond shock close prev) in
     (* entered = Some true from the first shock on *)
-    let entered = Indicator.bars_since shock > !0. in
+    let entered = Indicator.bars_since shock >= !0. in
     (* trail the stop once in; [cond (is_pending prev) trail prev]
        bootstraps the ratchet from the trail itself until the stop has a
        value *)
@@ -67,20 +67,20 @@ let build m ~fixed =
         cond entered (Indicator.max (cond (is_pending prev) trail prev) trail) prev)
     in
     let exit = close < stop in
-    compile ();
+    let module R = (val compile ()) in
     fun c ->
-      step [ Set (close, c) ];
-      value shock, value fill, value stop, value exit)
+      R.step [ Set (close, c) ];
+      R.value shock, R.value fill, R.value stop, R.value exit)
   else (
     (* the unbootstrapped stop: the knot's initial [Pending] flows through
        [max] and back into the knot — the stop never comes to life *)
     let fill = recurrence (fun prev -> cond shock close prev) in
     let stop = recurrence (fun prev -> Indicator.max prev trail) in
     let exit = close < stop in
-    compile ();
+    let module R = (val compile ()) in
     fun c ->
-      step [ Set (close, c) ];
-      value shock, value fill, value stop, value exit)
+      R.step [ Set (close, c) ];
+      R.value shock, R.value fill, R.value stop, R.value exit)
 ;;
 
 let run name closes expected_stop ~fixed =
@@ -100,13 +100,13 @@ let run name closes expected_stop ~fixed =
   Array.iteri
     (fun i c ->
        let shock, fill, stop, exit = step c in
-       let note =
-         if value_option shock = Some 1.
-         then "ENTRY shock"
-         else if value_option exit = Some 1.
-         then "STOP HIT -> exit"
-         else ""
-       in
+        let note =
+          if value_option shock = Some true
+          then "ENTRY shock"
+          else if value_option exit = Some true
+          then "STOP HIT -> exit"
+          else ""
+        in
        let ok =
          match value_option stop, expected_stop.(i) with
          | None, None -> true

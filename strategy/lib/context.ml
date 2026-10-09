@@ -4,7 +4,6 @@ type t =
   { mutable float_counter : int
   ; mutable effect_counter : int
   ; mutable registry : any_signal list
-    (* ; cache : (signal_key, any_signal) Hashtbl.t *)
   }
 
 let create () =
@@ -23,7 +22,7 @@ let check_operands : type a. int -> a def -> unit =
     then failwith "make: operand belongs to a different graph"
   in
   match def with
-  | Undefined | Const _ | Pure _ | Input | Knot | Tick -> ()
+  | Undefined | Const _ | Pure _ | Input | Knot -> ()
   | Pre src -> check src
   | Rec (knot, result) ->
     check knot;
@@ -39,7 +38,7 @@ let check_operands : type a. int -> a def -> unit =
 ;;
 
 let rec rank_of : type a. a def -> int = function
-  | Undefined | Const _ | Pure _ | Input | Tick | Knot -> 0
+  | Undefined | Const _ | Pure _ | Input | Knot -> 0
   | Pre s -> 1 + s.rank
   | Map (_, s) -> 1 + s.rank
   | Map2 (_, l, r) -> 1 + Int.max l.rank r.rank
@@ -54,7 +53,7 @@ let make t graph_id =
     (kind : a Language.signal_kind)
     : a signal ->
   check_operands graph_id def;
-  let fresh ?key () =
+  let fresh_signal () =
     let new_id =
       match kind with
       | Any ->
@@ -74,10 +73,7 @@ let make t graph_id =
       ; pre_child = None
       }
     in
-    t.registry <- Any signal :: t.registry;
-    (* (match key with
-     | Some key -> Hashtbl.replace t.cache key (Any signal)
-     | None -> ()); *)
+    t.registry <- Packed signal :: t.registry;
     signal
   in
   match def with
@@ -85,8 +81,8 @@ let make t graph_id =
     (match src.pre_child with
      | Some signal -> signal
      | None ->
-       let signal = fresh () in
+       let signal = fresh_signal () in
        src.pre_child <- Some signal;
        signal)
-  | _ -> fresh ()
+  | _ -> fresh_signal ()
 ;;

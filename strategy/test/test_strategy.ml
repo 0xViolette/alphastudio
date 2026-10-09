@@ -14,11 +14,6 @@ let pp_float = function
   | Some x -> Printf.sprintf "%g" x
 ;;
 
-let value_option = function
-  | None -> None
-  | Some x -> Some x
-;;
-
 let failures = ref 0
 
 type ('a, 'b) driver =
@@ -30,7 +25,13 @@ let run name pp_in pp_out inputs expected mk =
   let module M = Strategy.Make () in
   let d = mk (module M : Strategy_intf.S) in
   Printf.printf "%s\n" name;
-  Printf.printf "%-4s %-8s %-8s %-8s %s\n" "bar" "input" "got" "want" "ok";
+  Printf.printf
+    "%-4s %-8s %-8s %-8s %s\n"
+    "bar"
+    "input"
+    "got"
+    "want"
+    "ok";
   Array.iteri
     (fun i x ->
        d.step_in x;
@@ -57,9 +58,9 @@ let bars_since_gt_5 m =
   let open M.Ops in
   let inp = input () in
   let probe = Indicator.bars_since (inp > !5.) in
-  compile ();
-  { step_in = (fun x -> step [ Set (inp, x) ])
-  ; read = (fun () -> value_option (value probe))
+  let module R = (val compile ()) in
+  { step_in = (fun x -> R.step [ Set (inp, x) ])
+  ; read = (fun () -> R.value probe)
   }
 ;;
 
@@ -70,7 +71,17 @@ let () =
     pp_raw_float
     pp_float
     [| 1.; 1.; 1.; 9.; 1.; 1.; 9.; 1.; 1.; 1. |]
-    [| None; None; None; Some 0.; Some 1.; Some 2.; Some 0.; Some 1.; Some 2.; Some 3. |]
+    [| None
+     ; None
+     ; None
+     ; Some 0.
+     ; Some 1.
+     ; Some 2.
+     ; Some 0.
+     ; Some 1.
+     ; Some 2.
+     ; Some 3.
+    |]
     bars_since_gt_5
 ;;
 
@@ -112,9 +123,9 @@ let () =
        let open M.Ops in
        let inp = input () in
        let probe = Indicator.bars_since (pre inp > !5.) in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value probe))
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 
@@ -131,9 +142,9 @@ let () =
        let open M in
        let inp = input () in
        let probe = Indicator.highest 3 inp in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value probe))
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 
@@ -149,9 +160,9 @@ let () =
        let open M in
        let inp = input () in
        let probe = Indicator.lowest 3 inp in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value probe))
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 
@@ -167,10 +178,10 @@ let () =
        let module M = (val m : Strategy_intf.S) in
        let open M in
        let inp = input () in
-       let probe = fmap (fun x -> x *. 10.) inp in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value probe))
+       let probe = map (fun x -> x *. 10.) inp in
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 
@@ -186,10 +197,10 @@ let () =
        let module M = (val m : Strategy_intf.S) in
        let open M in
        let inp = input () in
-       let probe = fmap (fun x -> x +. 1.) (pre inp) in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value probe))
+       let probe = map (fun x -> x +. 1.) (pre inp) in
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 
@@ -208,13 +219,11 @@ let () =
        let open M in
        let open M.Ops in
        let price = input () in
-       let flag = input () in
+       let flag = ginput () in
        let probe = cond flag (price + !1.) (price - !1.) in
-       compile ();
-       { step_in =
-           (fun (f, b) ->
-              step [ Set (price, f); Set (flag, if b then 1. else 0.) ])
-       ; read = (fun () -> value_option (value probe))
+       let module R = (val compile ()) in
+       { step_in = (fun (f, b) -> R.step [ Set (price, f); Set (flag, b) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 
@@ -233,11 +242,12 @@ let () =
        let open M.Ops in
        let inp = input () in
        let counter =
-         recurrence (fun prev -> cond (is_pending prev) (const 0.) (prev + !1.))
+         recurrence (fun prev ->
+           cond (is_pending prev) (const 0.) (prev + !1.))
        in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value counter))
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value counter)
        })
 ;;
 
@@ -256,9 +266,9 @@ let () =
        let open M.Ops in
        let inp = input () in
        let probe = value_when (inp > !5.) inp in
-       compile ();
-       { step_in = (fun x -> step [ Set (inp, x) ])
-       ; read = (fun () -> value_option (value probe))
+       let module R = (val compile ()) in
+       { step_in = (fun x -> R.step [ Set (inp, x) ])
+       ; read = (fun () -> R.value probe)
        })
 ;;
 

@@ -1,16 +1,23 @@
 module type S = sig
   type 'a signal
-  type set = Set : float signal * float -> set
+  type set = Set : 'a signal * 'a -> set
 
   val mul : float signal -> float signal -> float signal
   val tick : float signal
-  val compile : unit -> unit
-  val step : set list -> unit
+
+  (* stepping and reading are only meaningful on a frozen graph, so both
+     live on the machine [compile] returns *)
+  module type MACHINE = sig
+    val step : set list -> unit
+    val value : 'a signal -> 'a option
+  end
+
+  val compile : unit -> (module MACHINE)
   val const : float -> float signal
   val pure : 'a -> 'a signal
   val undefined : unit -> 'a signal
-  val value : 'a signal -> 'a option
   val input : unit -> float signal
+  val ginput : unit -> 'a signal
   val pre : 'a signal -> 'a signal
   val delay : int -> 'a signal -> 'a signal
   val window : int -> 'a signal -> 'a signal list

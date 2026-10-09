@@ -20,11 +20,10 @@ type 'a signal =
 
 and _ def =
   | Undefined : 'a def
-  | Input : float def
-  | Tick : float def
+  | Input : 'a def
   | Pre : 'a signal -> 'a def
   | Knot : float def
-  | Rec : float signal * float signal -> 'a def
+  | Rec : float signal * float signal -> float def
   | Const : float -> float def
   | Pure : 'a option -> 'a def
   | Map : (float -> float) * float signal -> float def
@@ -36,4 +35,4 @@ and _ def =
       ('a option -> 'b option -> 'c option) * 'a signal * 'b signal
       -> 'c def
 
-type any_signal = Any : 'a signal -> any_signal [@@unboxed]
+type any_signal = Packed : 'a signal -> any_signal [@@unboxed]
