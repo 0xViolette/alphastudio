@@ -84,7 +84,7 @@ module Make () = struct
         ?(on_bar = fun (_ : Report.t) -> ())
         (orders : Order.request signal list)
     =
-    let module R = (val compile ()) in
+    let module Machine = (val compile ()) in
     let rec loop (resting : Order.request list) bars =
       match bars () with
       | Seq.Nil -> prerr_endline "End of stream"
@@ -92,7 +92,7 @@ module Make () = struct
         Broker.start_bar broker bar;
         let fills = Oms.fill_resting_orders broker resting in
         Broker.end_bar broker;
-        R.step
+        Machine.step
           [ Set (open_, bar.open_)
           ; Set (high, bar.high)
           ; Set (low, bar.low)
@@ -105,7 +105,9 @@ module Make () = struct
           ; Set (Account.realised_pnl, Broker.realised_pnl broker)
           ];
         let submitted =
-          Oms.place_orders broker (List.filter_map R.value orders)
+          Oms.place_orders
+            broker
+            (List.filter_map Machine.value orders)
         in
         let is_new (d : Order.request) =
           Bool.not
@@ -117,7 +119,8 @@ module Make () = struct
           { Report.bar
           ; fills
           ; placed = List.filter is_new submitted
-          ; probes = List.map (fun (name, s) -> name, R.value s) probes
+          ; probes =
+              List.map (fun (name, s) -> name, Machine.value s) probes
           };
         loop submitted rest
     in

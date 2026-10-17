@@ -1,11 +1,12 @@
 include Strategy_intf
 
 module Make () : S = struct
-  type 'a signal = 'a Language.signal
+  open Language
+
   type set = Runtime.set = Set : 'a signal * 'a -> set
+  type 'a signal = 'a Language.signal
 
   let g = Graph.create ()
-
   let undefined () = Graph.undefined g
   let const x = Graph.const g x
   let input () = Graph.input g
@@ -123,7 +124,7 @@ module Make () : S = struct
     recurrence (fun prev -> cond event signal prev)
   ;;
 
-  module type MACHINE = sig
+  module type Machine = sig
     val step : set list -> unit
     val value : 'a signal -> 'a option
   end
@@ -134,11 +135,10 @@ module Make () : S = struct
     else (
       g.compiled <- true;
       let r = Runtime.compile g in
-      let module R = struct
-        let step setters = Runtime.step r setters
+      (module struct
+        let step = Runtime.step r
         let value s = Runtime.value r s
-      end in
-      (module R : MACHINE))
+      end : Machine))
   ;;
 
   module Indicator = struct

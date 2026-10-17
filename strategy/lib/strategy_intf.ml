@@ -1,4 +1,6 @@
 module type S = sig
+  open Language
+
   type 'a signal
   type set = Set : 'a signal * 'a -> set
 
@@ -7,12 +9,12 @@ module type S = sig
 
   (* stepping and reading are only meaningful on a frozen graph, so both
      live on the machine [compile] returns *)
-  module type MACHINE = sig
+  module type Machine = sig
     val step : set list -> unit
     val value : 'a signal -> 'a option
   end
 
-  val compile : unit -> (module MACHINE)
+  val compile : unit -> (module Machine)
   val const : float -> float signal
   val pure : 'a -> 'a signal
   val undefined : unit -> 'a signal
