@@ -32,8 +32,8 @@ type driver =
   }
 
 let run name inputs expected mk =
-  let module M = Strategy.Make () in
-  let d = mk (module M : Strategy_intf.S) in
+  let module M = Dsl.Make () in
+  let d = mk (module M : Dsl.S) in
   Printf.printf "== %s\n" name;
   Array.iteri
     (fun i x ->
@@ -132,7 +132,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6. |] in
   let expected = sma_series 3 xs in
   run "sma 3 inp" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let inp = input () in
     let probe = Indicator.sma 3 inp in
@@ -148,7 +148,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6.; 7.; 8. |] in
   let expected = ema_series 3 (Array.map (fun x -> Some x) xs) in
   run "ema 3 inp" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let inp = input () in
     let probe = Indicator.ema 3 inp in
@@ -165,7 +165,7 @@ let () =
   let xs = [| 2.; 4.; 6.; 8.; 10.; 12.; 14.; 16.; 18.; 20.; 22.; 24. |] in
   let expected = ema_series 3 (sma_series 4 xs) in
   run "ema 3 (sma 4 inp)" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let inp = input () in
     let probe = Indicator.(ema 3 (sma 4 inp)) in
@@ -181,7 +181,7 @@ let () =
   let xs = [| 1.; 1.; 9.; 1.; 1.; 2.; 1.; 1.; 1.; 1. |] in
   let expected = ema_series 3 (bars_since_series 5. xs) in
   run "ema 3 (bars_since (inp > 5))" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in
@@ -197,7 +197,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6.; 7.; 8.; 9.; 10. |] in
   let expected = ema_series 2 (ema_series 3 (Array.map (fun x -> Some x) xs)) in
   run "ema 2 (ema 3 inp) — nested recurrences" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let inp = input () in
     let probe = Indicator.(ema 2 (ema 3 inp)) in
@@ -213,7 +213,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6. |] in
   let expected = [| Some 0.; Some 1.; Some 2.; Some 3.; Some 4.; Some 5. |] in
   run "recurrence bootstrap const 0, body = prev + 1" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in
@@ -230,7 +230,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6. |] in
   let expected = [| None; None; None; None; None; None |] in
   run "unbootstrapped recurrence stays pending" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in
@@ -247,7 +247,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4. |] in
   let expected = [| Some 1.; Some 2.; Some 3.; Some 4. |] in
   run "recurrence bootstrap from input" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in
@@ -264,7 +264,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6. |] in
   let expected = [| Some 5.; Some 5.; Some 1.; Some 2.; Some 3.; Some 4. |] in
   run "fallback to const 5 until delay 2 inp is present" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let inp = input () in
     let delayed = delay 2 inp in
@@ -280,7 +280,7 @@ let () =
   let xs = [| 1.; 1.; 9.; 1.; 1.; 8.; 1. |] in
   let expected = [| None; None; Some 9.; Some 9.; Some 9.; Some 8.; Some 8. |] in
   run "latch: cond event value prev" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in
@@ -296,7 +296,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5.; 6. |] in
   let expected = [| Some 1.; Some 3.; Some 6.; Some 10.; Some 15.; Some 21. |] in
   run "cumulative sum recurrence" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in
@@ -313,7 +313,7 @@ let () =
   let xs = [| 1.; 2.; 3.; 4.; 5. |] in
   let expected = [| Some 0.; Some 1.; Some 2.; Some 3.; Some 4. |] in
   run "bar_index" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let inp = input () in
     let probe = tick in
@@ -330,7 +330,7 @@ let () =
   let xs = [| 1.; 3.; 2.; 4. |] in
   let expected = [| Some (-9.); Some 13.; Some (-8.); Some 14. |] in
   run "bool input via ginput" xs expected (fun m ->
-    let module M = (val m : Strategy_intf.S) in
+    let module M = (val m : Dsl.S) in
     let open M in
     let open Ops in
     let inp = input () in

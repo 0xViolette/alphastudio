@@ -1,10 +1,10 @@
-include Strategy_intf
+include Dsl_intf
 
 module Make () : S = struct
-  open Language
+  open Ast
 
-  type set = Runtime.set = Set : 'a signal * 'a -> set
-  type 'a signal = 'a Language.signal
+  type set = Machine.set = Set : 'a signal * 'a -> set
+  type 'a signal = 'a Ast.signal
 
   let g = Graph.create ()
   let undefined () = Graph.undefined g
@@ -134,10 +134,10 @@ module Make () : S = struct
     then failwith "already compiled"
     else (
       g.compiled <- true;
-      let r = Runtime.compile g in
+      let r = Machine.compile g in
       (module struct
-        let step = Runtime.step r
-        let value s = Runtime.value r s
+        let step = Machine.step r
+        let value s = Machine.value r s
       end : Machine))
   ;;
 

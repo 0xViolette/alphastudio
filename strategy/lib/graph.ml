@@ -1,5 +1,5 @@
 type t =
-  { ctx : Context.t
+  { ctx : Registry.t
   ; mutable compiled : bool
   ; id : int
   }
@@ -13,14 +13,14 @@ let fresh_token =
 ;;
 
 let create () =
-  { ctx = Context.create (); compiled = false; id = fresh_token () }
+  { ctx = Registry.create (); compiled = false; id = fresh_token () }
 ;;
 
-open Language
+open Ast
 
 let make g (def : 'a def) =
   if not g.compiled
-  then Context.make g.ctx g.id def
+  then Registry.make g.ctx g.id def
   else failwith "Cannot mess with a compiled graph"
 ;;
 

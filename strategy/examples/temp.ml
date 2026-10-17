@@ -29,7 +29,7 @@ let value_option = function
 ;;
 
 (* Part 1: crossovers in isolation, fed hand-picked (fast, slow) pairs. *)
-module Raw = Strategy.Make ()
+module Raw = Dsl.Make ()
 
 let raw_fast = Raw.input ()
 let raw_slow = Raw.input ()
@@ -82,7 +82,7 @@ let raw_expected_under =
 (* Part 2: the classic use — fast/slow SMA trend switch (golden/death cross).
    An up-down-up ramp (not flats) so the SMAs stay strictly separated
    around each crossing instead of sitting exactly equal. *)
-module Trend = Strategy.Make ()
+module Trend = Dsl.Make ()
 
 let close = Trend.input ()
 

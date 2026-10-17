@@ -1,5 +1,5 @@
 open Lib
-module Papa = Ohlc.Make ()
+module Papa = Backtest.Make ()
 
 let strat () =
   let open Papa in

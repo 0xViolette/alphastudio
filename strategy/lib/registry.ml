@@ -1,4 +1,4 @@
-open Language
+open Ast
 
 type t =
   { mutable float_counter : int
@@ -48,10 +48,7 @@ let rec rank_of : type a. a def -> int = function
 ;;
 
 let make t graph_id =
-  fun (type a)
-    (def : a def)
-    (kind : a Language.signal_kind)
-    : a signal ->
+  fun (type a) (def : a def) (kind : a signal_kind) : a signal ->
   check_operands graph_id def;
   let fresh_signal () =
     let new_id =

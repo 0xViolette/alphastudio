@@ -5,7 +5,7 @@ open Lib
    [bars_since c] should be: [None] before the first bar where [c] holds,
    [Some 0.] on any bar where [c] holds, and count up 1, 2, 3... after it.
 
-   With [signal] abstract in [Strategy_intf.S], a signal cannot cross a
+   With [signal] abstract in [Dsl.S], a signal cannot cross a
    first-class-module boundary, so each scenario builds a concrete [driver]
    record inside the module instead. *)
 
@@ -22,8 +22,8 @@ type ('a, 'b) driver =
   }
 
 let run name pp_in pp_out inputs expected mk =
-  let module M = Strategy.Make () in
-  let d = mk (module M : Strategy_intf.S) in
+  let module M = Dsl.Make () in
+  let d = mk (module M : Dsl.S) in
   Printf.printf "%s\n" name;
   Printf.printf
     "%-4s %-8s %-8s %-8s %s\n"
@@ -53,7 +53,7 @@ let run name pp_in pp_out inputs expected mk =
 let pp_raw_float = Printf.sprintf "%g"
 
 let bars_since_gt_5 m =
-  let module M = (val m : Strategy_intf.S) in
+  let module M = (val m : Dsl.S) in
   let open M in
   let open M.Ops in
   let inp = input () in
@@ -118,7 +118,7 @@ let () =
     [| 1.; 9.; 1.; 1. |]
     [| None; None; Some 0.; Some 1. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let open M.Ops in
        let inp = input () in
@@ -138,7 +138,7 @@ let () =
     [| 3.; 7.; 2.; 8.; 1.; 4. |]
     [| None; None; Some 7.; Some 8.; Some 8.; Some 8. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let inp = input () in
        let probe = Indicator.highest 3 inp in
@@ -156,7 +156,7 @@ let () =
     [| 3.; 7.; 2.; 8.; 1.; 4. |]
     [| None; None; Some 2.; Some 2.; Some 1.; Some 1. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let inp = input () in
        let probe = Indicator.lowest 3 inp in
@@ -175,7 +175,7 @@ let () =
     [| 1.; 2. |]
     [| Some 10.; Some 20. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let inp = input () in
        let probe = map (fun x -> x *. 10.) inp in
@@ -194,7 +194,7 @@ let () =
     [| 5.; 7.; 9. |]
     [| None; Some 6.; Some 8. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let inp = input () in
        let probe = map (fun x -> x +. 1.) (pre inp) in
@@ -215,7 +215,7 @@ let () =
     [| 1., true; 2., false; 3., true |]
     [| Some 2.; Some 1.; Some 4. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let open M.Ops in
        let price = input () in
@@ -237,7 +237,7 @@ let () =
     [| 100.; 200.; 300.; 400. |]
     [| Some 0.; Some 1.; Some 2.; Some 3. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let open M.Ops in
        let inp = input () in
@@ -261,7 +261,7 @@ let () =
     [| 1.; 1.; 9.; 1.; 1.; 8.; 1. |]
     [| None; None; Some 9.; Some 9.; Some 9.; Some 8.; Some 8. |]
     (fun m ->
-       let module M = (val m : Strategy_intf.S) in
+       let module M = (val m : Dsl.S) in
        let open M in
        let open M.Ops in
        let inp = input () in

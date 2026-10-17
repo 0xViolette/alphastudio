@@ -42,7 +42,7 @@ let value_option = function
 
 (* ~fixed:false = Act A (unbootstrapped, dead); ~fixed:true = Act B. *)
 let build m ~fixed =
-  let module M = (val m : Strategy_intf.S) in
+  let module M = (val m : Dsl.S) in
   let open M in
   let open M.Ops in
   let close = input () in
@@ -84,8 +84,8 @@ let build m ~fixed =
 ;;
 
 let run name closes expected_stop ~fixed =
-  let module M = Strategy.Make () in
-  let step = build (module M : Strategy_intf.S) ~fixed in
+  let module M = Dsl.Make () in
+  let step = build (module M : Dsl.S) ~fixed in
   Printf.printf "%s\n" name;
   Printf.printf
     "%-4s %-6s %-7s %-7s %-9s %-6s %s\n"

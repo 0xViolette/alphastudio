@@ -1,8 +1,10 @@
+open Ast
+
 type src =
   | F of int
   | E of int
 
-val src_of : 'a Language.signal -> src
+val src_of : 'a signal -> src
 
 type instr =
   | IPrev of int * int
@@ -28,7 +30,7 @@ val compile : Graph.t -> t
 val read_src : t -> src -> Obj.t
 val exec : t -> instr -> unit
 
-type set = Set : 'a Language.signal * 'a -> set
+type set = Set : 'a signal * 'a -> set
 
 val step : t -> set list -> unit
-val value : t -> 'a Language.signal -> 'a option
+val value : t -> 'a signal -> 'a option

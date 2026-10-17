@@ -1,5 +1,5 @@
 module type S = sig
-  open Language
+  open Ast
 
   type 'a signal
   type set = Set : 'a signal * 'a -> set
@@ -81,8 +81,4 @@ module type S = sig
     val lowest : int -> float signal -> float signal
     val bars_since : bool signal -> float signal
   end
-end
-
-module type Strategy = sig
-  module Make : functor () -> S
 end
