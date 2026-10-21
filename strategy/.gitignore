@@ -34,7 +34,9 @@ setup.log
 
 # User
 bin/temp*
-#scripts/*
+.env
+.DS_Store
+scripts/*
 scratch/*
 *.XLS
 *.csv
