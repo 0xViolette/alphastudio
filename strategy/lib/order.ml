@@ -12,6 +12,7 @@ type fill =
   ; side : side
   ; price : float
   ; lots : float
+  ; fees : float
   }
 
 type order =

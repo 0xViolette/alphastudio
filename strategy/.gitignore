@@ -34,7 +34,7 @@ setup.log
 
 # User
 bin/temp*
-scripts/*
+#scripts/*
 scratch/*
 *.XLS
 *.csv

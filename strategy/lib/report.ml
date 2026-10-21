@@ -52,7 +52,7 @@ let csv_header probe_names =
     ","
     ([ "Date"; "Time"; "Open"; "High"; "Low"; "Close" ]
      @ probe_names
-     @ [ "event"; "fill_price"; "fill_qty" ])
+     @ [ "event"; "fill_price"; "fill_qty"; "fill_cost" ])
 ;;
 
 let csv_row (r : t) =
@@ -66,5 +66,6 @@ let csv_row (r : t) =
      @ [ events r
        ; pipe (fun (f : Order.fill) -> num f.price)
        ; pipe (fun (f : Order.fill) -> num f.lots)
+       ; pipe (fun (f : Order.fill) -> num f.fees)
        ])
 ;;

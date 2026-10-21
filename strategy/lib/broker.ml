@@ -123,6 +123,7 @@ end
 
 type t =
   { lot_size : float
+  ; costs : Costs.t
   ; account : Account.t
   ; mutable positions : Positions.t
   ; mutable bar : C.bar
@@ -131,8 +132,9 @@ type t =
   ; mutable orders : order list
   }
 
-let create ~lot_size ~initial_balance =
+let create ~lot_size ~initial_balance ?(costs = Costs.none) () =
   { lot_size
+  ; costs
   ; account = Account.create initial_balance
   ; positions = Positions.create ()
   ; bar =
@@ -229,7 +231,8 @@ let fill_on_bar (b : C.bar) (o : order) : execution option =
     else None
   in
   match o.kind, o.side with
-  | Market, _ -> Some { price = b.open_; path_dist = 0.; open_priority = 0. }
+  | Market, _ ->
+    Some { price = b.open_; path_dist = 0.; open_priority = 0. }
   | Limit p, Buy | Stop p, Sell ->
     if b.open_ <= p then at_open (-.p) else reached p
   | Limit p, Sell | Stop p, Buy ->
@@ -250,7 +253,8 @@ let next_fill (t : t) =
          then None
          else (
            match fill_on_bar t.bar o with
-           | Some exec when exec.path_dist >= t.path_cursor -> Some (exec, o)
+           | Some exec when exec.path_dist >= t.path_cursor ->
+             Some (exec, o)
            | _ -> None))
       t.orders
   in
@@ -264,7 +268,24 @@ let next_fill (t : t) =
   | (exec, o) :: _ ->
     t.path_cursor <- exec.path_dist;
     cancel t o.id;
-    let price = exec.price in
+    (* the trigger logic above runs on the raw price; costs only move the
+       executed price (slippage, against the order) and debit the fee *)
+    let res =
+      t.costs.apply
+        { Costs.side = o.side
+        ; kind = o.kind
+        ; price = exec.price
+        ; lots = o.lots
+        ; lot_size = t.lot_size
+        ; bar = t.bar
+        }
+    in
+    let dir =
+      match o.side with
+      | Buy -> 1.
+      | Sell -> -1.
+    in
+    let price = exec.price +. (dir *. res.slippage) in
     let side =
       match o.side with
       | Buy -> Position.Long
@@ -275,7 +296,7 @@ let next_fill (t : t) =
       *. units_of_lots t o.lots
       *. price
     in
-    Account.update_cash t.account delta_cash;
+    Account.update_cash t.account (delta_cash -. res.fee);
     let updated_positions, delta_pnl =
       Positions.add
         ~lot_size:t.lot_size
@@ -283,6 +304,12 @@ let next_fill (t : t) =
         { lots = o.lots; price; side }
     in
     t.positions <- updated_positions;
-    Account.update_realised_pnl t.account delta_pnl;
-    Some { id = o.id; side = o.side; price; lots = o.lots }
+    Account.update_realised_pnl t.account (delta_pnl -. res.fee);
+    Some
+      { id = o.id
+      ; side = o.side
+      ; price
+      ; lots = o.lots
+      ; fees = res.fee
+      }
 ;;

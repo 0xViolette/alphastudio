@@ -2,7 +2,13 @@ module Make () = struct
   module D = Dsl.Make ()
   include D
 
-  let broker = Broker.create ~lot_size:50. ~initial_balance:3_000_000.
+  let broker =
+    Broker.create
+      ~lot_size:50.
+      ~initial_balance:3_000_000.
+      ~costs:(Costs.from_env ())
+      ()
+  ;;
 
   module Env =
     Env.Make
