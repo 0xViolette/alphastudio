@@ -344,6 +344,61 @@ let () =
 ;;
 
 let () =
+  let bar : Codec.Ohlc.bar =
+    { timestamp = 0L
+    ; open_ = 20_000.
+    ; high = 20_100.
+    ; low = 19_900.
+    ; close = 20_000.
+    }
+  in
+  let ctx kind side =
+    { Costs.side = side
+    ; kind
+    ; price = 20_000.
+    ; lots = 8.
+    ; lot_size = 50.
+    ; bar
+    }
+  in
+  let check label got want =
+    let ok = Float.abs (got -. want) < tol in
+    if not ok then incr failures;
+    Printf.printf
+      "  %-36s got=%-14g want=%-14g %s\n"
+      label
+      got
+      want
+      (if ok then "OK" else "MISMATCH")
+  in
+  print_endline "== cost presets";
+  let model =
+    Costs.synthetic
+      ~premium_pct:1.4
+      ~slip_ticks_n:1.
+      ~slip_range_pct:1.
+      ~fee_per_order_amt:20.
+  in
+  let buy = model.apply (ctx (Order.Limit 20_000.) Order.Buy) in
+  let sell = model.apply (ctx (Order.Limit 20_000.) Order.Sell) in
+  check "synthetic buy fee" buy.fee 312.737216;
+  check "synthetic sell fee" sell.fee 312.737216;
+  check "synthetic limit slippage" buy.slippage 0.;
+  check
+    "synthetic market slippage"
+    (model.apply (ctx Order.Market Order.Buy)).slippage
+    4.1;
+  let futures =
+    Costs.india ~slip_ticks_n:1. ~slip_range_pct:1. ~fee_per_order_amt:20.
+  in
+  check
+    "futures sell fee"
+    (futures.apply (ctx (Order.Limit 20_000.) Order.Sell)).fee
+    4205.792;
+  print_newline ()
+;;
+
+let () =
   if !failures = 0
   then print_endline "All recurrence scenarios behaved as expected."
   else (

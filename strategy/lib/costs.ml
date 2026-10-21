@@ -8,10 +8,11 @@
 
    Toggle via environment (real env wins; otherwise a [.env] file in the
    working directory is read):
-     STRATEGY_COSTS = india (default) | simple | none
-     STRATEGY_COSTS_SLIP_TICKS      override slippage ticks (market/stop)
-     STRATEGY_COSTS_SLIP_RANGE_PCT  override % of bar range added to slip
-     STRATEGY_COSTS_FEE_PER_ORDER   override flat fee per fill *)
+     STRATEGY_COSTS = india (default) | simple | synthetic | none
+     STRATEGY_COSTS_SLIP_TICKS      slippage ticks (per leg for synthetic)
+     STRATEGY_COSTS_SLIP_RANGE_PCT  % bar-range slippage (per leg for synthetic)
+     STRATEGY_COSTS_FEE_PER_ORDER   override flat fee per fill/option order
+     STRATEGY_OPT_PREMIUM_PCT       synthetic: ATM premium per leg, % of underlying *)
 
 type fill_ctx =
   { side : Order.side
@@ -112,12 +113,12 @@ let tick_size = 0.05
 
 let india ~slip_ticks_n ~slip_range_pct ~fee_per_order_amt =
   let brokerage = fee_per_order fee_per_order_amt in
-  let txn = fee_bps 0.173 in
+  let txn = fee_bps 0.183 in
   (* NSE futures transaction charges *)
   let sebi = fee_bps 0.01 in
   (* Rs 10 per crore *)
-  let stt = fee_bps_side ~buy:0. ~sell:2. in
-  (* 0.02%, sell side only *)
+  let stt = fee_bps_side ~buy:0. ~sell:5. in
+  (* 0.05%, sell side only *)
   let stamp = fee_bps_side ~buy:0.2 ~sell:0. in
   (* 0.002%, buy side only *)
   let gst = tax_on 0.18 [ brokerage; txn; sebi ] in
@@ -126,7 +127,7 @@ let india ~slip_ticks_n ~slip_range_pct ~fee_per_order_amt =
     ~desc:
       (Printf.sprintf
          "india: slip %.2g tick + %g%% bar range (mkt/stop); fee \
-          flat %g + txn 0.173bps + sebi 0.01bps + stt 2bps(sell) + \
+          flat %g + txn 0.183bps + sebi 0.01bps + stt 5bps(sell) + \
           stamp 0.2bps(buy) + 18%% GST on (flat+txn+sebi)"
          slip_ticks_n
          slip_range_pct
@@ -153,6 +154,50 @@ let simple ~slip_ticks_n ~fee_per_order_amt =
     ()
 ;;
 
+let synthetic
+      ~premium_pct
+      ~slip_ticks_n
+      ~slip_range_pct
+      ~fee_per_order_amt
+  =
+  let premium ctx = premium_pct /. 100. *. ctx.price in
+  let leg_turnover ctx = premium ctx *. ctx.lots *. ctx.lot_size in
+  let brokerage = 2. *. fee_per_order_amt in
+  let fee ctx =
+    let leg = leg_turnover ctx in
+    let txn_sebi = 2. *. (3.553 +. 0.01) *. 1e-4 *. leg in
+    let stt = 15. *. 1e-4 *. leg in
+    let stamp = 0.3 *. 1e-4 *. leg in
+    brokerage
+    +. txn_sebi
+    +. stt
+    +. stamp
+    +. (0.18 *. (brokerage +. txn_sebi))
+  in
+  let leg_slip =
+    slip_sum
+      [ slip_ticks slip_ticks_n ~tick_size
+      ; slip_range_frac (slip_range_pct /. 100.)
+      ]
+  in
+  let slip ctx = 2. *. leg_slip ctx in
+  make
+    ~name:"synthetic"
+    ~desc:
+      (Printf.sprintf
+         "synthetic: premium %g%%/leg; slip 2 x (%.2g tick + %g%% \
+          bar range) (mkt/stop); fee 2 x flat %g + txn 3.553bps/leg \
+          + sebi 0.01bps/leg + stt 15bps(sell leg) + stamp \
+          0.3bps(buy leg) + 18%% GST on (brokerage+txn+sebi)"
+         premium_pct
+         slip_ticks_n
+         slip_range_pct
+         fee_per_order_amt)
+    ~slip
+    ~fee
+    ()
+;;
+
 (* ---- environment toggle ---- *)
 
 (* A [.env] file in the working directory supplies variables the real
@@ -166,32 +211,38 @@ let dotenv =
         (try
            while true do
              let line = String.trim (input_line ic) in
-             (match line with
-              | "" -> ()
-              | _ when line.[0] = '#' -> ()
-              | _ ->
-                let line =
-                  if String.starts_with ~prefix:"export " line
-                  then String.trim (String.sub line 7 (String.length line - 7))
-                  else line
-                in
-                (match String.index_opt line '=' with
-                 | None -> ()
-                 | Some i ->
-                   let key = String.trim (String.sub line 0 i) in
-                   let v =
-                     String.trim
-                       (String.sub line (i + 1) (String.length line - i - 1))
-                   in
-                   let n = String.length v in
-                   let v =
-                     if n >= 2
-                        && ((v.[0] = '"' && v.[n - 1] = '"')
-                            || (v.[0] = '\'' && v.[n - 1] = '\''))
-                     then String.sub v 1 (n - 2)
-                     else v
-                   in
-                   if key <> "" then Hashtbl.replace tbl key v))
+             match line with
+             | "" -> ()
+             | _ when line.[0] = '#' -> ()
+             | _ ->
+               let line =
+                 if String.starts_with ~prefix:"export " line
+                 then
+                   String.trim
+                     (String.sub line 7 (String.length line - 7))
+                 else line
+               in
+               (match String.index_opt line '=' with
+                | None -> ()
+                | Some i ->
+                  let key = String.trim (String.sub line 0 i) in
+                  let v =
+                    String.trim
+                      (String.sub
+                         line
+                         (i + 1)
+                         (String.length line - i - 1))
+                  in
+                  let n = String.length v in
+                  let v =
+                    if
+                      n >= 2
+                      && ((v.[0] = '"' && v.[n - 1] = '"')
+                          || (v.[0] = '\'' && v.[n - 1] = '\''))
+                    then String.sub v 1 (n - 2)
+                    else v
+                  in
+                  if key <> "" then Hashtbl.replace tbl key v)
            done
          with
          | End_of_file -> close_in_noerr ic)
@@ -245,6 +296,9 @@ let from_env () =
       (getenv_num "STRATEGY_COSTS_FEE_PER_ORDER")
       ~default:20.
   in
+  let premium_pct =
+    Option.value (getenv_num "STRATEGY_OPT_PREMIUM_PCT") ~default:1.4
+  in
   let t =
     match preset with
     | "none" | "off" | "zero" -> none
@@ -255,10 +309,16 @@ let from_env () =
         ~fee_per_order_amt:per_order
     | "simple" ->
       simple ~slip_ticks_n:slip_ticks ~fee_per_order_amt:per_order
+    | "synthetic" | "options" | "synth" ->
+      synthetic
+        ~premium_pct
+        ~slip_ticks_n:slip_ticks
+        ~slip_range_pct
+        ~fee_per_order_amt:per_order
     | other ->
       Printf.eprintf
-        "costs: unknown STRATEGY_COSTS=%S (want india|simple|none); \
-         using none\n\
+        "costs: unknown STRATEGY_COSTS=%S (want \
+         india|simple|synthetic|none); using none\n\
          %!"
         other;
       none

@@ -42,3 +42,4 @@ scratch/*
 *.csv
 *.png
 *.txt
+*.html
