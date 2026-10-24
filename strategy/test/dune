@@ -5,3 +5,7 @@
 (test
  (name test_loop)
  (libraries lib))
+
+(test
+ (name test_costs)
+ (libraries lib))

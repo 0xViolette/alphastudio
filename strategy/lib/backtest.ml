@@ -1,12 +1,17 @@
-module Make () = struct
+module Make (C : sig
+  val lot_size : float
+  val initial_balance : float
+  val costs : Costs.t
+end) () =
+struct
   module D = Dsl.Make ()
   include D
 
   let broker =
     Broker.create
-      ~lot_size:50.
-      ~initial_balance:3_000_000.
-      ~costs:(Costs.from_env ())
+      ~lot_size:C.lot_size
+      ~initial_balance:C.initial_balance
+      ~costs:C.costs
       ()
   ;;
 
@@ -64,6 +69,8 @@ module Make () = struct
   ;;
 
   let backtest
+        ?(from_ts = None)
+        ?(till_ts = None)
         ?(probes : (string * float signal) list = [])
         ?(on_bar = fun (_ : Report.t) -> ())
         (orders : Order.request signal list)
@@ -95,6 +102,6 @@ module Make () = struct
           };
         loop next_resting rest
     in
-    loop [] (Feed.stdin_bars ())
+    loop [] (Feed.stdin_bars ~from_ts ~till_ts ())
   ;;
 end

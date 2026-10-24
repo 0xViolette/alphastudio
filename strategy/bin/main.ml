@@ -1,5 +1,15 @@
 open Lib
-module Papa = Backtest.Make ()
+
+let cfg = Costs_cli.parse Sys.argv
+
+module Papa =
+  Backtest.Make
+    (struct
+      let lot_size = cfg.Costs_cli.lot_size
+      let initial_balance = cfg.Costs_cli.initial_balance
+      let costs = cfg.Costs_cli.costs
+    end)
+    ()
 
 let strat () =
   let open Papa in
@@ -34,6 +44,7 @@ let strat () =
   let con4 = !2.0 in
   let finalcon = Indicator.min con1 (Indicator.min con2 con3) in
   let tradecon = Indicator.max finalcon con4 in
+  (* let tradecon = Indicator.min !1. (Indicator.min finalcon con4) in *)
   let atr_at_entry =
     cond
       (Indicator.bars_since entered_trade <= !50.)
@@ -107,6 +118,8 @@ let () =
   let orders, probes = strat () in
   Printf.printf "%s\n" (Report.csv_header (List.map fst probes));
   Papa.backtest
+    ~from_ts:cfg.Costs_cli.from_ts
+    ~till_ts:cfg.Costs_cli.till_ts
     ~probes
     ~on_bar:(fun r -> Printf.printf "%s\n" (Report.csv_row r))
     orders;

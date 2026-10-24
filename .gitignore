@@ -1,5 +1,7 @@
 local_data/
 *.txt
+dhan/
+.kilo/
 
 # Local OPAM switch
 _opam/

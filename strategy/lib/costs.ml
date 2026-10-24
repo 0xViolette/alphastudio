@@ -1,4 +1,4 @@
-(* Transaction costs and slippage, composed from small parts.
+(* Transaction costs and slippage for NSE equity derivatives.
 
    A model [t] maps each fill's context to a [result]: [slippage] is an
    adverse price adjustment in price units (buys fill higher, sells lower;
@@ -6,13 +6,20 @@
    cash amount debited from the account. Fill *detection* never depends on
    costs — only the executed price and the fee do.
 
-   Toggle via environment (real env wins; otherwise a [.env] file in the
-   working directory is read):
-     STRATEGY_COSTS = india (default) | simple | synthetic | none
-     STRATEGY_COSTS_SLIP_TICKS      slippage ticks (per leg for synthetic)
-     STRATEGY_COSTS_SLIP_RANGE_PCT  % bar-range slippage (per leg for synthetic)
-     STRATEGY_COSTS_FEE_PER_ORDER   override flat fee per fill/option order
-     STRATEGY_OPT_PREMIUM_PCT       synthetic: ATM premium per leg, % of underlying *)
+   Rates are the NSE equity-derivatives schedule as of 2026-10-22:
+     - NSE futures transaction charge  0.00183% each side (IPFT included)
+     - NSE options transaction charge  0.03553% of premium each side
+     - SEBI turnover fee               0.0001% each side
+     - STT futures                     0.05% sell side
+     - STT options                     0.15% of premium sell side
+     - stamp duty futures              0.002% buy side
+     - stamp duty options              0.003% of premium buy side
+     - GST                             18% on brokerage + exchange + SEBI
+
+   [Synthetic_futures] is a cost-only model of a two-leg synthetic future:
+   buy call + sell put for a long, sell call + buy put for a short. It does
+   not model option premium cash flows, expiry, or exercise; positions are
+   assumed to be squared off before expiry. *)
 
 type fill_ctx =
   { side : Order.side
@@ -28,11 +35,129 @@ type result =
   ; fee : float
   }
 
+type preset =
+  | No_costs
+  | Futures
+  | Synthetic_futures
+  | Simple
+
+type params =
+  { preset : preset
+  ; slip_ticks : float
+  ; slip_range_pct : float
+  ; fee_per_order : float
+  ; call_premium_pct : float
+  ; put_premium_pct : float
+  ; opt_slip_ticks : float
+  ; opt_slip_pct : float
+  ; tick_size_override : float option
+  ; opt_tick_size : float
+  }
+
 type t =
   { name : string
   ; desc : string
   ; apply : fill_ctx -> result
   }
+
+let as_of = "2026-10-22"
+
+(* Annual/statutory rates, in basis points of the relevant turnover. *)
+type rates =
+  { nse_futures_txn_bps : float
+  ; nse_options_txn_bps : float
+  ; sebi_bps : float
+  ; stt_futures_bps : float
+  ; stt_options_bps : float
+  ; stamp_futures_bps : float
+  ; stamp_options_bps : float
+  ; gst : float
+  }
+
+let rates =
+  { nse_futures_txn_bps = 0.183
+  ; nse_options_txn_bps = 3.553
+  ; sebi_bps = 0.01
+  ; stt_futures_bps = 5.
+  ; stt_options_bps = 15.
+  ; stamp_futures_bps = 0.2
+  ; stamp_options_bps = 0.3
+  ; gst = 0.18
+  }
+;;
+
+let default_params =
+  { preset = Futures
+  ; slip_ticks = 1.
+  ; slip_range_pct = 1.
+  ; fee_per_order = 20.
+  ; call_premium_pct = 1.0
+  ; put_premium_pct = 0.8
+  ; opt_slip_ticks = 1.
+  ; opt_slip_pct = 0.5
+  ; tick_size_override = None
+  ; opt_tick_size = 0.05
+  }
+;;
+
+let preset_name = function
+  | No_costs -> "none"
+  | Futures -> "futures"
+  | Synthetic_futures -> "synthetic_futures"
+  | Simple -> "simple"
+;;
+
+let preset_of_string s =
+  match String.lowercase_ascii (String.trim s) with
+  | "none" | "off" | "zero" -> Some No_costs
+  | "futures" | "india" | "india_futures" -> Some Futures
+  | "synthetic" | "synthetic_futures" | "synth" | "options" ->
+    Some Synthetic_futures
+  | "simple" -> Some Simple
+  | _ -> None
+;;
+
+let presets =
+  [ No_costs, "no costs, no slippage"
+  ; ( Futures
+    , "NSE index futures: NSE txn, SEBI, STT sell, stamp buy, GST" )
+  ; ( Synthetic_futures
+    , "synthetic futures via two option legs: 2x brokerage/txn/SEBI, \
+       STT on the sell leg, stamp on the buy leg" )
+  ; Simple, "flat fee per order plus slippage only"
+  ]
+;;
+
+let validate p =
+  let check name v =
+    if not (Float.is_finite v) || v < 0.
+    then
+      invalid_arg
+        (Printf.sprintf "costs: %s must be a finite number >= 0 (got %g)" name v)
+  in
+  check "slip_ticks" p.slip_ticks;
+  check "slip_range_pct" p.slip_range_pct;
+  check "fee_per_order" p.fee_per_order;
+  check "call_premium_pct" p.call_premium_pct;
+  check "put_premium_pct" p.put_premium_pct;
+  check "opt_slip_ticks" p.opt_slip_ticks;
+  check "opt_slip_pct" p.opt_slip_pct;
+  (match p.tick_size_override with
+   | None -> ()
+   | Some v ->
+     if not (Float.is_finite v) || v <= 0.
+     then
+       invalid_arg
+         (Printf.sprintf
+            "costs: tick_size must be a finite number > 0 (got %g)"
+            v));
+  if not (Float.is_finite p.opt_tick_size) || p.opt_tick_size <= 0.
+  then
+    invalid_arg
+      (Printf.sprintf
+         "costs: opt_tick_size must be a finite number > 0 (got %g)"
+         p.opt_tick_size)
+;;
 
 let none =
   { name = "none"
@@ -41,11 +166,22 @@ let none =
   }
 ;;
 
+(* NSE price steps: 0.05 below 15,000; 0.10 from 15,000 to 30,000; 0.20 above. *)
+let tick_size_for_price price =
+  if price < 15_000.
+  then 0.05
+  else if price < 30_000.
+  then 0.10
+  else 0.20
+;;
+
+let tick_size p ctx =
+  Option.value p.tick_size_override ~default:(tick_size_for_price ctx.price)
+;;
+
 (* ---- slippage parts: fill_ctx -> price units ---- *)
 
-let slip_ticks n ~tick_size _ = n *. tick_size
-let slip_pct_of_price p ctx = p *. ctx.price
-
+let slip_ticks n ~tick_size_ _ = n *. tick_size_
 let slip_range_frac f ctx =
   let b = ctx.bar in
   f *. (b.Codec.Ohlc.high -. b.Codec.Ohlc.low)
@@ -55,22 +191,13 @@ let slip_sum parts ctx =
   List.fold_left (fun acc f -> acc +. f ctx) 0. parts
 ;;
 
-let slip_max a b ctx = Float.max (a ctx) (b ctx)
-
 (* ---- fee parts: fill_ctx -> currency ---- *)
 
 let turnover ctx = ctx.price *. ctx.lots *. ctx.lot_size
 let fee_per_order amt _ = amt
-let fee_per_lot amt ctx = amt *. ctx.lots
-let fee_bps bps ctx = bps *. 1e-4 *. turnover ctx
 
-let fee_bps_side ~buy ~sell ctx =
-  fee_bps
-    (match ctx.side with
-     | Order.Buy -> buy
-     | Order.Sell -> sell)
-    ctx
-;;
+let fee_bps turnover_bps turnover = turnover_bps *. 1e-4 *. turnover
+let fee_bps_on_turnover bps ctx = fee_bps bps (turnover ctx)
 
 let fee_sum parts ctx =
   List.fold_left (fun acc f -> acc +. f ctx) 0. parts
@@ -107,222 +234,163 @@ let make ~name ~desc ~slip ~fee () =
   }
 ;;
 
-(* ---- presets ---- *)
-
-let tick_size = 0.05
-
-let india ~slip_ticks_n ~slip_range_pct ~fee_per_order_amt =
-  let brokerage = fee_per_order fee_per_order_amt in
-  let txn = fee_bps 0.183 in
-  (* NSE futures transaction charges *)
-  let sebi = fee_bps 0.01 in
-  (* Rs 10 per crore *)
-  let stt = fee_bps_side ~buy:0. ~sell:5. in
-  (* 0.05%, sell side only *)
-  let stamp = fee_bps_side ~buy:0.2 ~sell:0. in
-  (* 0.002%, buy side only *)
-  let gst = tax_on 0.18 [ brokerage; txn; sebi ] in
+let futures p =
+  let brokerage = fee_per_order p.fee_per_order in
+  let txn = fee_bps_on_turnover rates.nse_futures_txn_bps in
+  let sebi = fee_bps_on_turnover rates.sebi_bps in
+  let stt ctx =
+    match ctx.side with
+    | Order.Buy -> 0.
+    | Order.Sell -> fee_bps rates.stt_futures_bps (turnover ctx)
+  in
+  let stamp ctx =
+    match ctx.side with
+    | Order.Buy -> fee_bps rates.stamp_futures_bps (turnover ctx)
+    | Order.Sell -> 0.
+  in
+  let gst = tax_on rates.gst [ brokerage; txn; sebi ] in
   make
-    ~name:"india"
+    ~name:"futures"
     ~desc:
       (Printf.sprintf
-         "india: slip %.2g tick + %g%% bar range (mkt/stop); fee \
-          flat %g + txn 0.183bps + sebi 0.01bps + stt 5bps(sell) + \
-          stamp 0.2bps(buy) + 18%% GST on (flat+txn+sebi)"
-         slip_ticks_n
-         slip_range_pct
-         fee_per_order_amt)
+         "futures (NSE, rates as of %s): slip %.2g tick + %g%% bar range \
+          (mkt/stop); fee flat %g + txn 0.183bps + sebi 0.01bps + stt \
+          5bps(sell) + stamp 0.2bps(buy) + 18%% GST on (flat+txn+sebi)"
+         as_of
+         p.slip_ticks
+         p.slip_range_pct
+         p.fee_per_order)
     ~slip:
-      (slip_sum
-         [ slip_ticks slip_ticks_n ~tick_size
-         ; slip_range_frac (slip_range_pct /. 100.)
-         ])
+      (fun ctx ->
+        slip_sum
+          [ slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx)
+          ; slip_range_frac (p.slip_range_pct /. 100.)
+          ]
+          ctx)
     ~fee:(fee_sum [ brokerage; txn; sebi; stt; stamp; gst ])
     ()
 ;;
 
-let simple ~slip_ticks_n ~fee_per_order_amt =
+let simple p =
   make
     ~name:"simple"
     ~desc:
       (Printf.sprintf
          "simple: slip %.2g tick (mkt/stop); fee flat %g"
-         slip_ticks_n
-         fee_per_order_amt)
-    ~slip:(slip_ticks slip_ticks_n ~tick_size)
-    ~fee:(fee_per_order fee_per_order_amt)
+         p.slip_ticks
+         p.fee_per_order)
+    ~slip:
+      (fun ctx ->
+        slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx) ctx)
+    ~fee:(fee_per_order p.fee_per_order)
     ()
 ;;
 
-let synthetic
-      ~premium_pct
-      ~slip_ticks_n
-      ~slip_range_pct
-      ~fee_per_order_amt
-  =
-  let premium ctx = premium_pct /. 100. *. ctx.price in
-  let leg_turnover ctx = premium ctx *. ctx.lots *. ctx.lot_size in
-  let brokerage = 2. *. fee_per_order_amt in
-  let fee ctx =
-    let leg = leg_turnover ctx in
-    let txn_sebi = 2. *. (3.553 +. 0.01) *. 1e-4 *. leg in
-    let stt = 15. *. 1e-4 *. leg in
-    let stamp = 0.3 *. 1e-4 *. leg in
-    brokerage
-    +. txn_sebi
-    +. stt
-    +. stamp
-    +. (0.18 *. (brokerage +. txn_sebi))
+let synthetic p =
+  let call_premium ctx = p.call_premium_pct /. 100. *. ctx.price in
+  let put_premium ctx = p.put_premium_pct /. 100. *. ctx.price in
+  let buy_premium ctx =
+    match ctx.side with
+    | Order.Buy -> call_premium ctx
+    | Order.Sell -> put_premium ctx
   in
-  let leg_slip =
-    slip_sum
-      [ slip_ticks slip_ticks_n ~tick_size
-      ; slip_range_frac (slip_range_pct /. 100.)
-      ]
+  let sell_premium ctx =
+    match ctx.side with
+    | Order.Buy -> put_premium ctx
+    | Order.Sell -> call_premium ctx
   in
-  let slip ctx = 2. *. leg_slip ctx in
+  let buy_turnover ctx = buy_premium ctx *. ctx.lots *. ctx.lot_size in
+  let sell_turnover ctx = sell_premium ctx *. ctx.lots *. ctx.lot_size in
+  let total_turnover ctx = buy_turnover ctx +. sell_turnover ctx in
+  let brokerage _ = 2. *. p.fee_per_order in
+  let txn ctx = fee_bps rates.nse_options_txn_bps (total_turnover ctx) in
+  let sebi ctx = fee_bps rates.sebi_bps (total_turnover ctx) in
+  let stt ctx = fee_bps rates.stt_options_bps (sell_turnover ctx) in
+  let stamp ctx = fee_bps rates.stamp_options_bps (buy_turnover ctx) in
+  let gst = tax_on rates.gst [ brokerage; txn; sebi ] in
+  let leg_slip premium ctx =
+    (p.opt_slip_ticks *. p.opt_tick_size)
+    +. ((p.opt_slip_pct /. 100.) *. premium ctx)
+  in
   make
-    ~name:"synthetic"
+    ~name:"synthetic_futures"
     ~desc:
       (Printf.sprintf
-         "synthetic: premium %g%%/leg; slip 2 x (%.2g tick + %g%% \
-          bar range) (mkt/stop); fee 2 x flat %g + txn 3.553bps/leg \
-          + sebi 0.01bps/leg + stt 15bps(sell leg) + stamp \
-          0.3bps(buy leg) + 18%% GST on (brokerage+txn+sebi)"
-         premium_pct
-         slip_ticks_n
-         slip_range_pct
-         fee_per_order_amt)
-    ~slip
-    ~fee
+         "synthetic futures (options, rates as of %s): call premium %g%%, \
+          put premium %g%%; slip per leg %.2g x %.2g tick + %g%% premium \
+          (mkt/stop); fee 2 x flat %g + txn 3.553bps + sebi 0.01bps on both \
+          legs + stt 15bps(sell leg) + stamp 0.3bps(buy leg) + 18%% GST on \
+          (brokerage+txn+sebi)"
+         as_of
+         p.call_premium_pct
+         p.put_premium_pct
+         p.opt_slip_ticks
+         p.opt_tick_size
+         p.opt_slip_pct
+         p.fee_per_order)
+    ~slip:(fun ctx ->
+      leg_slip call_premium ctx +. leg_slip put_premium ctx)
+    ~fee:(fee_sum [ brokerage; txn; sebi; stt; stamp; gst ])
     ()
 ;;
 
-(* ---- environment toggle ---- *)
-
-(* A [.env] file in the working directory supplies variables the real
-   environment does not set; real environment variables win. Lines are
-   KEY=value, optional [export ] prefix, optional quotes, [#] comments. *)
-let dotenv =
-  lazy
-    (let tbl = Hashtbl.create 8 in
-     (match open_in ".env" with
-      | ic ->
-        (try
-           while true do
-             let line = String.trim (input_line ic) in
-             match line with
-             | "" -> ()
-             | _ when line.[0] = '#' -> ()
-             | _ ->
-               let line =
-                 if String.starts_with ~prefix:"export " line
-                 then
-                   String.trim
-                     (String.sub line 7 (String.length line - 7))
-                 else line
-               in
-               (match String.index_opt line '=' with
-                | None -> ()
-                | Some i ->
-                  let key = String.trim (String.sub line 0 i) in
-                  let v =
-                    String.trim
-                      (String.sub
-                         line
-                         (i + 1)
-                         (String.length line - i - 1))
-                  in
-                  let n = String.length v in
-                  let v =
-                    if
-                      n >= 2
-                      && ((v.[0] = '"' && v.[n - 1] = '"')
-                          || (v.[0] = '\'' && v.[n - 1] = '\''))
-                    then String.sub v 1 (n - 2)
-                    else v
-                  in
-                  if key <> "" then Hashtbl.replace tbl key v)
-           done
-         with
-         | End_of_file -> close_in_noerr ic)
-      | exception Sys_error _ -> ());
-     tbl)
+let of_params p =
+  validate p;
+  match p.preset with
+  | No_costs -> none
+  | Futures -> futures p
+  | Synthetic_futures -> synthetic p
+  | Simple -> simple p
 ;;
 
-let getenv name =
-  match Sys.getenv_opt name with
-  | Some _ as v -> v
-  | None -> Hashtbl.find_opt (Lazy.force dotenv) name
+type knob =
+  { key : string
+  ; label : string
+  ; unit : string
+  ; default : float
+  ; min : float
+  ; applies_to : string list
+  }
+
+let knob ?(unit = "") ?(min = 0.) key label default applies_to =
+  { key; label; unit; default; min; applies_to }
 ;;
 
-let getenv_num name =
-  match getenv name with
-  | None -> None
-  | Some s ->
-    (match float_of_string_opt (String.trim s) with
-     | Some _ as v -> v
-     | None ->
-       Printf.eprintf
-         "costs: ignoring invalid %s=%S (want a number)\n%!"
-         name
-         s;
-       None)
-;;
-
-let from_env () =
-  let preset =
-    match getenv "STRATEGY_COSTS" with
-    | None -> "india"
-    | Some s -> String.lowercase_ascii (String.trim s)
-  in
-  let source =
-    if Sys.getenv_opt "STRATEGY_COSTS" <> None
-    then "env"
-    else if Hashtbl.mem (Lazy.force dotenv) "STRATEGY_COSTS"
-    then ".env"
-    else "default"
-  in
-  let slip_ticks =
-    Option.value (getenv_num "STRATEGY_COSTS_SLIP_TICKS") ~default:1.
-  in
-  let slip_range_pct =
-    Option.value
-      (getenv_num "STRATEGY_COSTS_SLIP_RANGE_PCT")
-      ~default:1.
-  in
-  let per_order =
-    Option.value
-      (getenv_num "STRATEGY_COSTS_FEE_PER_ORDER")
-      ~default:20.
-  in
-  let premium_pct =
-    Option.value (getenv_num "STRATEGY_OPT_PREMIUM_PCT") ~default:1.4
-  in
-  let t =
-    match preset with
-    | "none" | "off" | "zero" -> none
-    | "india" | "india_futures" ->
-      india
-        ~slip_ticks_n:slip_ticks
-        ~slip_range_pct
-        ~fee_per_order_amt:per_order
-    | "simple" ->
-      simple ~slip_ticks_n:slip_ticks ~fee_per_order_amt:per_order
-    | "synthetic" | "options" | "synth" ->
-      synthetic
-        ~premium_pct
-        ~slip_ticks_n:slip_ticks
-        ~slip_range_pct
-        ~fee_per_order_amt:per_order
-    | other ->
-      Printf.eprintf
-        "costs: unknown STRATEGY_COSTS=%S (want \
-         india|simple|synthetic|none); using none\n\
-         %!"
-        other;
-      none
-  in
-  Printf.eprintf "costs: %s [%s]\n%!" t.desc source;
-  t
+let knobs =
+  [ knob
+      "slip_ticks"
+      "Slippage ticks"
+      default_params.slip_ticks
+      [ "futures"; "simple" ]
+  ; knob
+      "slip_range_pct"
+      "Slippage % of bar range"
+      default_params.slip_range_pct
+      [ "futures" ]
+  ; knob
+      "fee_per_order"
+      "Flat fee per order"
+      default_params.fee_per_order
+      [ "futures"; "synthetic_futures"; "simple" ]
+  ; knob
+      "call_premium_pct"
+      "Call premium % of underlying"
+      default_params.call_premium_pct
+      [ "synthetic_futures" ]
+  ; knob
+      "put_premium_pct"
+      "Put premium % of underlying"
+      default_params.put_premium_pct
+      [ "synthetic_futures" ]
+  ; knob
+      "opt_slip_ticks"
+      "Option slippage ticks per leg"
+      default_params.opt_slip_ticks
+      [ "synthetic_futures" ]
+  ; knob
+      "opt_slip_pct"
+      "Option slippage % of premium"
+      default_params.opt_slip_pct
+      [ "synthetic_futures" ]
+  ]
 ;;
