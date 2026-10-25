@@ -1,0 +1,4 @@
+(executable
+ (name rheo)
+ (public_name rheo)
+ (libraries rheo unix))
