@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 (* Demo of [Indicator.crossover] / [Indicator.crossunder].
    -----------------------------------------------------

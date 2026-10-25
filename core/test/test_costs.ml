@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 let failures = ref 0
 let tol = 1e-9

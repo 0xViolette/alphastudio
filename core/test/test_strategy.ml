@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 (* Harness for [Indicator.bars_since] (plus highest/lowest and map checks).
    Each scenario runs a fresh graph against a hand-computed expected array.

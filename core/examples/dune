@@ -1,7 +1,7 @@
 (executable
  (name temp)
- (libraries lib))
+ (libraries rheo))
 
 (executable
  (name breakout)
- (libraries lib))
+ (libraries rheo))

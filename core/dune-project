@@ -1,6 +1,6 @@
 (lang dune 3.24)
 
-(name strategy)
+(name rheo)
 
 (generate_opam_files true)
 
@@ -16,7 +16,7 @@
 (documentation https://url/to/documentation)
 
 (package
- (name strategy)
+ (name rheo)
  (synopsis "A short synopsis")
  (description "A longer description")
  (depends ocaml)

@@ -1,11 +1,11 @@
 (test
  (name test_strategy)
- (libraries lib))
+ (libraries rheo))
 
 (test
  (name test_loop)
- (libraries lib))
+ (libraries rheo))
 
 (test
  (name test_costs)
- (libraries lib))
+ (libraries rheo))

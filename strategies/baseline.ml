@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 let cfg = Costs_cli.parse Sys.argv
 
@@ -44,7 +44,6 @@ let strat () =
   let con4 = !2.0 in
   let finalcon = Indicator.min con1 (Indicator.min con2 con3) in
   let tradecon = Indicator.max finalcon con4 in
-  (* let tradecon = Indicator.min !1. (Indicator.min finalcon con4) in *)
   let atr_at_entry =
     cond
       (Indicator.bars_since entered_trade <= !50.)
@@ -65,42 +64,8 @@ let strat () =
   let enter_long = enter_long "LE" tradecon (Stop le) bullish in
   let cover_l = exit_long "SE cover" (Stop se) bearish in
   let enter_short = enter_short "SE" tradecon (Stop se) bearish in
-  let trail_mult = 2.0 in
-  let trail_n = 22 in
-  let chand_l =
-    Indicator.highest trail_n (high - (!trail_mult * atr))
-  in
-  let chand_s = Indicator.lowest trail_n low + (!trail_mult * atr) in
-  (* 1 *)
-  let trail_l =
-    exit_long
-      "TRL"
-      (Stop chand_l)
-      (chand_l > Position.entry_price && chand_l < close)
-  in
-  let trail_s =
-    exit_short
-      "TRS"
-      (Stop chand_s)
-      (chand_s < Position.entry_price && chand_s > close)
-  in
-  (* 2 *)
-  (* let trail_l = *)
-  (*   exit_long "TRL" Market (chand_l > Position.entry_price) *)
-  (* in *)
-  (* let trail_s = *)
-  (*   exit_short "TRS" Market (chand_s < Position.entry_price) *)
-  (* in *)
   let orders =
-    [ stop_l
-    ; trail_l
-    ; stop_s
-    ; trail_s
-    ; cover_s
-    ; enter_long
-    ; cover_l
-    ; enter_short
-    ]
+    [ stop_l; stop_s; cover_s; enter_long; cover_l; enter_short ]
   in
   let probes =
     [ "atr1", atr1
@@ -110,18 +75,25 @@ let strat () =
     ; "atr_at_entry", atr_at_entry
     ; "lx2n", lx2n
     ; "sx2n", sx2n
-    ; "le", le
-    ; "se", se
-    ; "chand_l", chand_l
-    ; "chand_s", chand_s
     ]
   in
   orders, probes
 ;;
 
+let tags =
+  [ "LE", 1
+  ; "SE", -1
+  ; "2NL", -1
+  ; "2NS", 1
+  ; "LE cover", 1
+  ; "SE cover", -1
+  ]
+;;
+
 let () =
   let t0 = Sys.time () in
   let orders, probes = strat () in
+  Printf.printf "# tags:%s\n" (tags |> List.map (fun (t,d) -> Printf.sprintf " %s=%+d" t d) |> String.concat "");
   Printf.printf "%s\n" (Report.csv_header (List.map fst probes));
   Papa.backtest
     ~from_ts:cfg.Costs_cli.from_ts

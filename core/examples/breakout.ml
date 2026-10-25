@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 (* Volatility-shock entry + ATR trailing stop, under the recurrence
    semantics: [recurrence body] starts its knot as [Pending] and runs

@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 (* Recurrence semantics suite: [recurrence body] starts its knot as
    [Pending], runs [body] from the first bar, and feeds each result back on

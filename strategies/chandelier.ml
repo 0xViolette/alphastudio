@@ -1,4 +1,4 @@
-open Lib
+open Rheo
 
 let cfg = Costs_cli.parse Sys.argv
 
@@ -73,10 +73,16 @@ let strat () =
   let chand_s = Indicator.lowest trail_n low + (!trail_mult * atr) in
   (* 1 *)
   let trail_l =
-    exit_long "TRL" (Stop chand_l) (chand_l > Position.entry_price)
+    exit_long
+      "TRL"
+      (Stop chand_l)
+      (chand_l > Position.entry_price && chand_l < close)
   in
   let trail_s =
-    exit_short "TRS" (Stop chand_s) (chand_s < Position.entry_price)
+    exit_short
+      "TRS"
+      (Stop chand_s)
+      (chand_s < Position.entry_price && chand_s > close)
   in
   (* 2 *)
   (* let trail_l = *)
@@ -113,9 +119,22 @@ let strat () =
   orders, probes
 ;;
 
+let tags =
+  [ "LE", 1
+  ; "SE", -1
+  ; "2NL", -1
+  ; "2NS", 1
+  ; "TRL", -1
+  ; "TRS", 1
+  ; "LE cover", 1
+  ; "SE cover", -1
+  ]
+;;
+
 let () =
   let t0 = Sys.time () in
   let orders, probes = strat () in
+  Printf.printf "# tags:%s\n" (tags |> List.map (fun (t,d) -> Printf.sprintf " %s=%+d" t d) |> String.concat "");
   Printf.printf "%s\n" (Report.csv_header (List.map fst probes));
   Papa.backtest
     ~from_ts:cfg.Costs_cli.from_ts
