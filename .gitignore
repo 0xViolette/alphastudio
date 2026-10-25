@@ -1,19 +1,42 @@
-local_data/
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*~
+
+# OCaml / Dune
+_build/
+*.cmi
+*.cmo
+*.cma
+*.cmx
+*.cmxs
+*.cmxa
+*.o
+*.a
+*.byte
+*.native
+*.install
+.merlin
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Data and generated artifacts
+data/*.csv
+out/
+*.png
+*.html
 *.txt
+
+# External / local-only
 dhan/
 .kilo/
-
-# Local OPAM switch
 _opam/
+local_data/
 
-.DS_Store
-
-data/*.csv
-data/__pycache__/
-# Refactored locations
-core/scratch/
-core/_build/
-strategies/_build/
-out/
-
-__pycache__/
+# Secrets
+.env
