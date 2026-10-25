@@ -24,9 +24,11 @@ rheo/test/            semantics test suites
 ## Build and test
 
 Requires OCaml 5.x and dune >= 3.24; the only library dependency is `unix`.
-This working tree uses a local opam switch in `_opam`:
+There is no local `_opam` switch; build with the active opam switch (5.4.0,
+`ocaml-base-compiler.5.4.0`):
 
 ```sh
+opam switch 5.4.0
 eval $(opam env)
 dune build
 dune runtest
