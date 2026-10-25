@@ -1,0 +1,34 @@
+# Local OCaml switch and build output
+/_opam/
+/_build/
+**/_build/
+
+# Python environments and caches
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+*.pyc
+
+# Credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Generated reports
+/reports/**
+!/reports/.gitkeep
+
+# Local market data
+/data/raw/**
+!/data/raw/.gitkeep
+/data/processed/**
+!/data/processed/.gitkeep
+
+# Local Dhan data and caches
+/research/ingest/dhan/data/
+/research/ingest/dhan/.cache/
