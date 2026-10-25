@@ -1,0 +1,12 @@
+(lang dune 3.24)
+
+(name rheo-backtest)
+
+(generate_opam_files true)
+
+(package
+ (name rheo-backtest)
+ (synopsis "Backtesting and trading harness built on Rheo")
+ (description "Broker, OMS, order model, costs, feed, codec, report, environment, and trading indicators for Rheo-based strategies.")
+ (depends ocaml rheo)
+ (tags ("trading" "backtesting")))
