@@ -24,7 +24,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-CSV = Path(__file__).with_name("new_data.csv")
+CSV = Path(__file__).resolve().parents[2] / "data" / "new_data.csv"
 STRUCT = struct.Struct("<Qdddd")
 IST = timezone(timedelta(hours=5, minutes=30))
 
