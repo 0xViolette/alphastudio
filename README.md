@@ -12,13 +12,13 @@ The tracked project is deliberately small and OCaml-only:
 
 ```
 protocol/ohlc.md          binary input format
-strategy/lib/             DSL, compiler, broker, OMS, reporting
-strategy/bin/main.ml      reference strategy using the full API
-strategy/examples/        executable DSL examples
-strategy/test/            semantics test suites
+core/lib/             DSL (Rheo), compiler, broker, OMS, reporting
+strategies/           strategy executables (main, baseline)
+core/examples/        executable DSL examples
+core/test/            semantics test suites
 ```
 
-`_opam/`, `_build/`, `local_data/`, `scratch/`, and generated `*.csv`,
+`_opam/`, `_build/`, `data/`, `scratch/`, and generated `*.csv`,
 `*.png`, and `*.txt` files are ignored and are not part of the repository.
 
 ## Build and test
@@ -28,7 +28,6 @@ This working tree uses a local opam switch in `_opam`:
 
 ```sh
 eval $(opam env)
-cd strategy
 dune build
 dune runtest
 ```
@@ -36,8 +35,8 @@ dune runtest
 The examples need no input data:
 
 ```sh
-dune exec examples/temp.exe      # crossover semantics
-dune exec examples/breakout.exe  # recurrence bootstrapping
+dune exec core/examples/temp.exe      # crossover semantics
+dune exec core/examples/breakout.exe  # recurrence bootstrapping
 ```
 
 ## Core modules
@@ -65,7 +64,7 @@ A signal conceptually carries one value per bar. Internally every value is
 optional: `None` means "not available yet". Float signals store pending values
 as `nan` in flat arrays, while generic signals store them as `None`.
 
-The snippets below assume the library is opened with `open Lib`.
+The snippets below assume the library is opened with `open Rheo`.
 
 ```ocaml
 module M = Dsl.Make ()       (* one independent graph *)
@@ -258,7 +257,7 @@ live for the next bar. If their condition remains true they are recomputed and
 re-placed on each bar.
 
 ```ocaml
-open Lib
+open Rheo
 module B = Backtest.Make ()
 
 let () =
@@ -345,12 +344,12 @@ Bars must be in chronological order. The reader refuses to read from a
 terminal and treats a partial trailing record as an error. See
 `protocol/ohlc.md`.
 
-A local data emitter lives in `local_data/` in this working tree, but that
+A local data emitter lives in `data/` in this working tree, but that
 directory is ignored and is not part of the repository. Any producer that
 writes the 40-byte format can drive the engine:
 
 ```sh
-producer | dune exec strategy > out.csv
+producer | dune exec strategies/main.exe > out.csv
 ```
 
 ## Extending the DSL
