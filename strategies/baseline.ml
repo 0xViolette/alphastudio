@@ -1,13 +1,11 @@
-open Rheo
-
-let cfg = Costs_cli.parse Sys.argv
+let cfg = RheoBacktest.Costs_cli.parse Sys.argv
 
 module Papa =
-  Backtest.Make
+  RheoBacktest.Backtest.Make
     (struct
-      let lot_size = cfg.Costs_cli.lot_size
-      let initial_balance = cfg.Costs_cli.initial_balance
-      let costs = cfg.Costs_cli.costs
+      let lot_size = cfg.lot_size
+      let initial_balance = cfg.initial_balance
+      let costs = cfg.costs
     end)
     ()
 
@@ -94,12 +92,12 @@ let () =
   let t0 = Sys.time () in
   let orders, probes = strat () in
   Printf.printf "# tags:%s\n" (tags |> List.map (fun (t,d) -> Printf.sprintf " %s=%+d" t d) |> String.concat "");
-  Printf.printf "%s\n" (Report.csv_header (List.map fst probes));
+  Printf.printf "%s\n" (RheoBacktest.Report.csv_header (List.map fst probes));
   Papa.backtest
-    ~from_ts:cfg.Costs_cli.from_ts
-    ~till_ts:cfg.Costs_cli.till_ts
+    ~from_ts:cfg.from_ts
+    ~till_ts:cfg.till_ts
     ~probes
-    ~on_bar:(fun r -> Printf.printf "%s\n" (Report.csv_row r))
+    ~on_bar:(fun r -> Printf.printf "%s\n" (RheoBacktest.Report.csv_row r))
     orders;
   Printf.eprintf "Execution time: %.4f seconds\n" (Sys.time () -. t0)
 ;;

@@ -1,9 +1,9 @@
 (executable
  (name chandelier)
  (public_name chandelier)
- (libraries rheo unix))
+ (libraries rheo rheo-backtest unix))
 
 (executable
  (name baseline)
  (public_name baseline)
- (libraries rheo unix))
+ (libraries rheo rheo-backtest unix))

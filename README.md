@@ -49,12 +49,8 @@ dune exec rheo/examples/breakout.exe  # recurrence bootstrapping
 | `lib/dsl_intf.ml` | the public DSL signature |
 | `lib/dsl.ml` | combinator implementation, `Ops`, indicators, `compile` |
 | `lib/machine.ml` | graph-to-instruction compiler and the stepping runtime |
-| `lib/ta.ml` | true range and Wilder ATR on top of the DSL |
-| `lib/env.ml` | bar, account, and position signals for the backtester |
-| `lib/backtest.ml` | harness, order constructors, and the bar loop |
-| `lib/broker.ml`, `lib/oms.ml`, `lib/order.ml` | fills, netting, positions |
-| `lib/feed.ml`, `lib/codec.ml` | stdin reader and OHLC wire decoding |
-| `lib/report.ml` | per-bar report records and CSV rendering |
+
+| `rheo-backtest` package | `Backtest`, `Broker`, `Oms`, `Order`, `Env`, `Feed`, `Codec`, `Report`, `Costs`, `Ta` |
 
 ## The DSL
 
