@@ -3,8 +3,18 @@
  (public_name chandelier)
  (libraries rheo rheo-backtest unix))
 
+(executable
+ (name chandelier_35)
+ (public_name chandelier_35)
+ (libraries rheo rheo-backtest unix))
+
 
 (executable
  (name baseline)
  (public_name baseline)
+ (libraries rheo rheo-backtest unix))
+
+(executable
+ (name baseline_35)
+ (public_name baseline_35)
  (libraries rheo rheo-backtest unix))

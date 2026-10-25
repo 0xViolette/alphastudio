@@ -1047,14 +1047,14 @@ def _prompt_output_files(args):
         raw = input("Export trades CSV? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input(f"  CSV file name (Enter = synthetic_tearsheet_trades.csv): ").strip()
-            args.csv = Path(name) if name else Path("synthetic_tearsheet_trades.csv")
+            args.csv = Path(name) if name else ROOT / "out" / "synthetic_tearsheet_trades.csv"
 
     # HTML report
     if args.export is None and "--export" not in sys.argv:
         raw = input("Export HTML report? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input(f"  HTML file name (Enter = synthetic_tearsheet_report.html): ").strip()
-            args.export = Path(name) if name else Path("synthetic_tearsheet_report.html")
+            args.export = Path(name) if name else ROOT / "out" / "synthetic_tearsheet_report.html"
 
 
 def main():
@@ -1080,7 +1080,7 @@ def main():
         "--export",
         nargs="?",
         type=Path,
-        const=ROOT / "synthetic_tearsheet_report.html",
+        const=ROOT / "out" / "synthetic_tearsheet_report.html",
         default=None,
         metavar="PATH",
         help="write a styled, self-contained HTML report instead of printing "
@@ -1090,7 +1090,7 @@ def main():
         "--csv",
         nargs="?",
         type=Path,
-        const=ROOT / "synthetic_tearsheet_trades.csv",
+        const=ROOT / "out" / "synthetic_tearsheet_trades.csv",
         default=None,
         metavar="PATH",
         help="write a CSV trade log with timestamps, legs, prices, fees "
@@ -1217,6 +1217,7 @@ def main():
     if args.csv is not None:
         import csv as csv_mod
         csv_path = args.csv
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
         with open(csv_path, "w", newline="") as f:
             writer = csv_mod.writer(f)
             writer.writerow([

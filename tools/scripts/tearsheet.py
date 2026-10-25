@@ -1036,7 +1036,7 @@ def _prompt_output_files(args):
         raw = input("Export trades CSV? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input("  CSV file name (Enter = tearsheet_trades.csv): ").strip()
-            args.csv = Path(name) if name else Path("tearsheet_trades.csv")
+            args.csv = Path(name) if name else ROOT / "out" / "tearsheet_trades.csv"
 
     if args.export is None and "--export" not in sys.argv:
         raw = input("Export HTML report? (y/N): ").strip().lower()
@@ -1324,11 +1324,11 @@ def main():
         "--csv",
         nargs="?",
         type=Path,
-        const=ROOT / "tearsheet_trades.csv",
+        const=ROOT / "out" / "tearsheet_trades.csv",
         default=None,
         metavar="PATH",
         help="write a CSV trade log with timestamps, sides, prices, fees "
-             "(default: tearsheet_trades.csv)",
+             "(default: out/tearsheet_trades.csv)",
     )
     # costs.py already registers --from and --till. Reuse those actions rather
     # than registering the same option strings here (argparse rejects duplicates).
@@ -1625,6 +1625,7 @@ def main():
     # Write CSV trade log if requested
     if args.csv is not None:
         import csv as csv_mod
+        args.csv.parent.mkdir(parents=True, exist_ok=True)
         _write_trade_log_csv(args.csv, trade_log, cfg.preset, cfg.values, lot_size)
         print(f"trade log saved to: {args.csv}")
 
