@@ -1,5 +1,0 @@
-
-(executable
- (name schema)
- (public_name schema)
- (libraries rheo unix))

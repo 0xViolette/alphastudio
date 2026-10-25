@@ -22,7 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SCHEMA_TARGET = "core/schema.exe"
+SCHEMA_TARGET = "rheo/rheo.exe"
 # the CSV the emitter (plot_pnl.EMITTER) streams; bounds are read directly
 # from it so the wizard can name the usable --from/--till range
 DATA_CSV = ROOT / "data" / "new_data.csv"

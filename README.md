@@ -12,10 +12,10 @@ The tracked project is deliberately small and OCaml-only:
 
 ```
 protocol/ohlc.md          binary input format
-core/lib/             DSL (Rheo), compiler, broker, OMS, reporting
+rheo/lib/             DSL (Rheo), compiler, broker, OMS, reporting
 strategies/           strategy executables (main, baseline)
-core/examples/        executable DSL examples
-core/test/            semantics test suites
+rheo/examples/        executable DSL examples
+rheo/test/            semantics test suites
 ```
 
 `_opam/`, `_build/`, `data/`, `scratch/`, and generated `*.csv`,
@@ -35,8 +35,8 @@ dune runtest
 The examples need no input data:
 
 ```sh
-dune exec core/examples/temp.exe      # crossover semantics
-dune exec core/examples/breakout.exe  # recurrence bootstrapping
+dune exec rheo/examples/temp.exe      # crossover semantics
+dune exec rheo/examples/breakout.exe  # recurrence bootstrapping
 ```
 
 ## Core modules
