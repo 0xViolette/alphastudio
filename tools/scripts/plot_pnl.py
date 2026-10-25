@@ -1,7 +1,7 @@
 """Run the strategy on the data and plot the printed net PnL.
 
 Pipeline (run from the strategy/ project root):
-    python ../local_data/new_data_emitter.py | dune exec bin/main.exe
+    python ../local_data/ohlc_csv_emitter.py | dune exec bin/main.exe
 
 Usage: python3 scripts/plot_pnl.py [meanrev|main] [--out pnl.png]
 
@@ -29,7 +29,7 @@ from pathlib import Path
 import costs as cost_cli
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-EMITTER = ROOT / "data" / "new_data_emitter.py"
+EMITTER = ROOT / "tools" / "emitters" / "ohlc_csv_emitter.py"
 OUT_PNG = ROOT / "out" / "pnl.png"
 
 

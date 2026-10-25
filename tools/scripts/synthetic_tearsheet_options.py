@@ -73,7 +73,7 @@ def _filtered_schema():
 cost_cli.schema = _filtered_schema
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-EMITTER = ROOT / "data" / "option_derived_emitter.py"
+EMITTER = ROOT / "tools" / "emitters" / "synthetic_ohlc_emitter.py"
 _pp.EMITTER = EMITTER
 OUT_PNG = ROOT / "out" / "synthetic_tearsheet.png"
 NIFTY_CSV = ROOT / "data" / "nifty_atm_month1.csv"
