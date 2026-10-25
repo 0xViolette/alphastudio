@@ -7,3 +7,13 @@ dhan/
 _opam/
 
 .DS_Store
+
+data/*.csv
+data/__pycache__/
+# Refactored locations
+core/scratch/
+core/_build/
+strategies/_build/
+out/
+
+__pycache__/
