@@ -1,0 +1,10 @@
+{
+"as_of":"2026-10-22",
+"default_preset":"futures",
+"defaults":{"slip_ticks":1,"slip_range_pct":1,"fee_per_order":20,"call_premium_pct":1,"put_premium_pct":0.8,"opt_slip_ticks":1,"opt_slip_pct":0.5,"opt_tick_size":0.05},
+"lot_size":65,
+"initial_balance":3000000,
+"presets":[{"name":"none","description":"no costs, no slippage"},{"name":"futures","description":"NSE index futures: NSE txn, SEBI, STT sell, stamp buy, GST"},{"name":"synthetic_futures","description":"synthetic futures via two option legs: 2x brokerage/txn/SEBI, STT on the sell leg, stamp on the buy leg"},{"name":"simple","description":"flat fee per order plus slippage only"}],
+"knobs":[{"key":"slip_ticks","label":"Slippage ticks","unit":"","default":1,"min":0,"applies_to":["futures","simple"]},{"key":"slip_range_pct","label":"Slippage % of bar range","unit":"","default":1,"min":0,"applies_to":["futures"]},{"key":"fee_per_order","label":"Flat fee per order","unit":"","default":20,"min":0,"applies_to":["futures","synthetic_futures","simple"]},{"key":"call_premium_pct","label":"Call premium % of underlying","unit":"","default":1,"min":0,"applies_to":["synthetic_futures"]},{"key":"put_premium_pct","label":"Put premium % of underlying","unit":"","default":0.8,"min":0,"applies_to":["synthetic_futures"]},{"key":"opt_slip_ticks","label":"Option slippage ticks per leg","unit":"","default":1,"min":0,"applies_to":["synthetic_futures"]},{"key":"opt_slip_pct","label":"Option slippage % of premium","unit":"","default":0.5,"min":0,"applies_to":["synthetic_futures"]}],
+"rates":{"nse_futures_txn_bps":0.183,"nse_options_txn_bps":3.553,"sebi_bps":0.01,"stt_futures_bps":5,"stt_options_bps":15,"stamp_futures_bps":0.2,"stamp_options_bps":0.3,"gst":0.18}
+}
