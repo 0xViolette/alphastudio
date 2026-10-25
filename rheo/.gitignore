@@ -1,0 +1,14 @@
+_build/
+*.cmi
+*.cmo
+*.cma
+*.cmx
+*.cmxs
+*.cmxa
+*.o
+*.a
+*.byte
+*.native
+*.install
+.merlin
+.DS_Store

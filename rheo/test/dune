@@ -1,0 +1,7 @@
+(test
+ (name test_strategy)
+ (libraries rheo))
+
+(test
+ (name test_loop)
+ (libraries rheo))
