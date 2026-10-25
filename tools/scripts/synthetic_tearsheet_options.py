@@ -952,6 +952,13 @@ def build_kw(strategy, bars, fut_closes, lot_size, initial, rf, mar, trials):
         prev = month_end[key]
     annual = {y: _math_prod(rs) - 1 for y, rs in annual.items()}
 
+    monthly_points, annual_points = {}, {}
+    for t in trades:
+        key = (t["exit"].year, t["exit"].month)
+        monthly_points[key] = monthly_points.get(key, 0.0) + t.get("points", 0.0)
+    for key, val in monthly_points.items():
+        annual_points[key[0]] = annual_points.get(key[0], 0.0) + val
+
     bh_equity = [initial * c / day_fclose[0] for c in day_fclose]
     bh_bars = [initial * c / fut_closes[0] for c in fut_closes]
     bh_dd, bh_peaks, _ = ts.drawdowns(bh_equity)
@@ -1043,6 +1050,7 @@ def build_kw(strategy, bars, fut_closes, lot_size, initial, rf, mar, trials):
         best_m=max(monthly.values()), worst_m=min(monthly.values()),
         psr=psr0, mintrl=mintrl, trials=trials, emax=emax, dsr=dsr,
         annual=annual, bench=bench,
+        monthly_points=monthly_points, annual_points=annual_points,
         synthetic=None,
         synthetic_sections=[],
         synthetic_warnings=[],

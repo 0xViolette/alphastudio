@@ -207,6 +207,9 @@ def ledger(bars, lot_size, initial):
                         "entry": entry_dt,
                         "exit": dt,
                         "bars": i - entry_i,
+                        "entry_price": entry_price,
+                        "exit_price": price,
+                        "points": direction * (price - entry_price),
                     }
                 )
                 left = lot_qty - direction * closed
@@ -564,7 +567,9 @@ def build_report(kw):
         "sections": sections,
         "bench": bench,
         "monthly": kw["monthly"],
+        "monthly_points": kw.get("monthly_points", {}),
         "annual": kw["annual"],
+        "annual_points": kw.get("annual_points", {}),
         "footer": footer,
     }
 
@@ -592,6 +597,20 @@ def print_report(c):
             for m in range(1, 13)
         ]
         print(f"  {dim(f'{y:<6}')}" + "".join(cells) + tone(annual[y] * 100, "{:+9.2f}"))
+
+    grid_p, annual_p = c.get("monthly_points", {}), c.get("annual_points", {})
+    if grid_p or annual_p:
+        print()
+        rule("MONTHLY RETURNS (POINTS)")
+        head = "  " + f"{'year':<6}" + "".join(f"{m:>7}" for m in MONTHS)
+        print(dim(head + f"{'year':>9}"))
+        for y in sorted(annual_p):
+            cells = [
+                f"{'':>7}" if (y, m) not in grid_p
+                else tone(grid_p[(y, m)], "{:+7.2f}")
+                for m in range(1, 13)
+            ]
+            print(f"  {dim(f'{y:<6}')}" + "".join(cells) + tone(annual_p[y], "{:+9.2f}"))
 
     if c["bench"]:
         rule("VERSUS BUY & HOLD")
@@ -883,6 +902,39 @@ def _html_monthly(c):
     return "\n".join(out)
 
 
+def _html_monthly_points(c):
+    grid, annual = c.get("monthly_points", {}), c.get("annual_points", {})
+    if not (grid or annual):
+        return ""
+    present = [abs(v) for v in grid.values()] or [1e-9]
+    scale = max(present) or 1e-9
+    out = [
+        '<section class="panel"><h2>Monthly returns (points)</h2>',
+        '<p class="caption">Monthly point P/L (exit \u2212 entry price per '
+        'trade). Green/red shading scales with the size of the move.</p>',
+        '<table class="monthly"><thead><tr><th></th>',
+    ]
+    out += [f"<th>{m}</th>" for m in MONTHS]
+    out.append("<th>Year</th></tr></thead><tbody>")
+    for y in sorted(annual):
+        out.append(f'<tr><td class="year">{y}</td>')
+        for m in range(1, 13):
+            v = grid.get((y, m))
+            if v is None:
+                out.append('<td class="miss">\u00b7</td>')
+                continue
+            alpha = 0.10 + 0.45 * min(abs(v) / scale, 1.0)
+            rgb = "38, 166, 154" if v >= 0 else "239, 83, 80"
+            out.append(
+                f'<td style="background:rgba({rgb},{alpha:.2f})">'
+                f'{v:+.2f}</td>')
+        a = annual[y]
+        cls = "pos" if a > 0 else "neg" if a < 0 else ""
+        out.append(f'<td class="annual {cls}">{a:+.2f}</td></tr>')
+    out.append("</tbody></table></section>")
+    return "\n".join(out)
+
+
 def write_html_report(path, kw, content, png_bytes):
     """Write the self-contained, styled HTML report."""
     cards = _html_cards(kw)
@@ -917,7 +969,7 @@ def write_html_report(path, kw, content, png_bytes):
     doc = doc.replace("__CARDS__", cards)
     doc = doc.replace("__OVERVIEW__", _html_rows(content["overview"]))
     doc = doc.replace("__SECTIONS__", "\n".join(sections))
-    doc = doc.replace("__MONTHLY__", _html_monthly(content))
+    doc = doc.replace("__MONTHLY__", _html_monthly(content) + "\n" + _html_monthly_points(content))
     doc = doc.replace("__BENCH__", bench)
     doc = doc.replace("__FOOTER__", _esc(content["footer"]))
     doc = doc.replace("__STAMP__", f"{datetime.now():%d %b %Y %H:%M}")
@@ -1463,6 +1515,14 @@ def main():
         prev = month_end[key]
     annual = {y: math_prod(rs) - 1 for y, rs in annual.items()}
 
+    # monthly points (pure exit - entry price per trade), grouped by exit month
+    monthly_points, annual_points = {}, {}
+    for t in trades:
+        key = (t["exit"].year, t["exit"].month)
+        monthly_points[key] = monthly_points.get(key, 0.0) + t.get("points", 0.0)
+    for key, val in monthly_points.items():
+        annual_points[key[0]] = annual_points.get(key[0], 0.0) + val
+
     bench = None
     bh_equity = [initial * c / day_close[0] for c in day_close]
     bh_bars = [initial * c / closes[0] for c in closes]  # bar-frequency, for the plot
@@ -1556,6 +1616,7 @@ def main():
         best_m=max(monthly.values()), worst_m=min(monthly.values()),
         psr=psr0, mintrl=mintrl, trials=args.trials, emax=emax, dsr=dsr,
         annual=annual, bench=bench,
+        monthly_points=monthly_points, annual_points=annual_points,
     )
     content = build_report(kw)
     if args.export is None:
