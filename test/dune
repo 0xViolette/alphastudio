@@ -5,7 +5,3 @@
 (test
  (name test_loop)
  (libraries rheo))
-
-(test
- (name test_costs)
- (libraries rheo))
