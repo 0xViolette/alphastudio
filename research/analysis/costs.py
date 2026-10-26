@@ -166,7 +166,9 @@ class CostConfig:
 
     def label(self) -> str:
         """Short label for a report caption."""
-        return f"{self.preset} (NSE rates as of {schema()['as_of']})"
+        if self.preset in {"futures", "synthetic_futures"}:
+            return f"{self.preset} (NSE rates as of {schema()['as_of']})"
+        return self.preset
 
 
 def _g(x: float) -> str:

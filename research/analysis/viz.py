@@ -42,12 +42,15 @@ from pathlib import Path
 import plotly.graph_objects as go
 
 import costs as cost_cli
+import plot_pnl
 from plot_pnl import (
     DEFAULT_STRATEGY,
     SIDE_BY_TAG,
     STRATEGIES,
+    is_zero,
     resolve_strategy,
     run_backtest,
+    sgn,
 )
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -310,12 +313,8 @@ def parse_stream(text):
     return dates, opens, highs, lows, closes, probes, bar_fills
 
 
-def is_zero(x):
-    return abs(x) < 1e-7
-
-
-def sgn(x):
-    return 0 if is_zero(x) else (1 if x > 0 else -1)
+is_zero = plot_pnl.is_zero
+sgn = plot_pnl.sgn
 
 
 def ledger(dates, closes, bar_fills, lot_size, initial):
