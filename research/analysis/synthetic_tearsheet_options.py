@@ -73,12 +73,12 @@ def _filtered_schema():
 cost_cli.schema = _filtered_schema
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-EMITTER = ROOT / "tools" / "emitters" / "synthetic_ohlc_emitter.py"
+EMITTER = ROOT / "research" / "emitters" / "synthetic_ohlc_emitter.py"
 _pp.EMITTER = EMITTER
-OUT_PNG = ROOT / "out" / "synthetic_tearsheet.png"
-NIFTY_CSV = ROOT / "data" / "nifty_atm_month1.csv"
-NIFTY_MONTH2_CSV = ROOT / "data" / "nifty_atm_month2.csv"
-DATA_CSV = ROOT / "data" / "new_data.csv"
+OUT_PNG = ROOT / "reports" / "plots" / "synthetic_tearsheet.png"
+NIFTY_CSV = ROOT / "data" / "raw" / "nifty_atm_month1.csv"
+NIFTY_MONTH2_CSV = ROOT / "data" / "raw" / "nifty_atm_month2.csv"
+DATA_CSV = ROOT / "data" / "raw" / "new_data.csv"
 
 W = 84
 NORMAL = NormalDist()
@@ -1111,14 +1111,14 @@ def _prompt_output_files(args):
         raw = input("Export trades CSV? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input(f"  CSV file name (Enter = synthetic_tearsheet_trades.csv): ").strip()
-            args.csv = Path(name) if name else ROOT / "out" / "synthetic_tearsheet_trades.csv"
+            args.csv = Path(name) if name else ROOT / "reports" / "trade-logs" / "synthetic_tearsheet_trades.csv"
 
     # HTML report
     if args.export is None and "--export" not in sys.argv:
         raw = input("Export HTML report? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input(f"  HTML file name (Enter = synthetic_tearsheet_report.html): ").strip()
-            args.export = Path(name) if name else ROOT / "out" / "synthetic_tearsheet_report.html"
+            args.export = Path(name) if name else ROOT / "reports" / "tearsheets" / "synthetic_tearsheet_report.html"
 
 
 def main():
@@ -1144,7 +1144,7 @@ def main():
         "--export",
         nargs="?",
         type=Path,
-        const=ROOT / "out" / "synthetic_tearsheet_report.html",
+        const=ROOT / "reports" / "tearsheets" / "synthetic_tearsheet_report.html",
         default=None,
         metavar="PATH",
         help="write a styled, self-contained HTML report instead of printing "
@@ -1154,7 +1154,7 @@ def main():
         "--csv",
         nargs="?",
         type=Path,
-        const=ROOT / "out" / "synthetic_tearsheet_trades.csv",
+        const=ROOT / "reports" / "trade-logs" / "synthetic_tearsheet_trades.csv",
         default=None,
         metavar="PATH",
         help="write a CSV trade log with timestamps, legs, prices, fees "

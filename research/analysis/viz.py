@@ -50,7 +50,7 @@ from plot_pnl import (
     run_backtest,
 )
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Order specs are read from the strategy sources instead of being hardcoded
 # per tag: every enter_*/exit_* declaration in bin/*.ml defines an order's
@@ -64,7 +64,7 @@ OCAML_COMMENT = re.compile(r"\(\*.*?\*\)", re.S)
 
 def _parse_order_specs():
     specs, index = {}, 0
-    for path in sorted((ROOT / "strategies").glob("*.ml")):
+    for path in sorted((ROOT / "research" / "strategies").glob("*.ml")):
         text = OCAML_COMMENT.sub(" ", path.read_text())
         for m in ORDER_SRC.finditer(text):
             action, tag = m.group(1), m.group(2)
@@ -697,7 +697,7 @@ def main():
 
     cfg = cost_cli.resolve(args, prompt=args.csv is None, ask_period=False)
     ctx = load_data(args, cfg)
-    render(ctx, args.style, args.out or (ROOT / "candles"), args.png)
+    render(ctx, args.style, args.out or (ROOT / "reports" / "plots" / "candles"), args.png)
 
 
 if __name__ == "__main__":

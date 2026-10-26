@@ -1,0 +1,11 @@
+[project]
+name = "alphastudio-analysis"
+version = "0.1.0"
+description = "Analysis and reporting scripts for AlphaStudio"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.9",
+    "plotly>=5.24",
+    "kaleido>=0.2",
+]

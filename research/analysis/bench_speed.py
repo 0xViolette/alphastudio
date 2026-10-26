@@ -21,8 +21,8 @@ import time
 
 import costs as cost_cli
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE = os.path.join(ROOT, "_build", "default", "bin", "main.exe")
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+EXE = os.path.join(ROOT, "_build", "default", "research", "strategies", "chandelier.exe")
 
 RECORD = struct.Struct("<qdddd")  # timestamp, open, high, low, close
 
@@ -72,9 +72,9 @@ def main():
     # 1-minute bars, continuous (24/7) market
     n = int(args.years * 365 * 24 * 60)
 
-    subprocess.run(["dune", "build", "bin/main.exe"], cwd=ROOT, check=True)
+    subprocess.run(["dune", "build", "research/strategies/chandelier.exe"], cwd=ROOT, check=True)
     if not os.path.exists(EXE):
-        sys.exit(f"missing {EXE} — run: dune build bin/main.exe")
+        sys.exit(f"missing {EXE} — run: dune build research/strategies/chandelier.exe")
 
     fd, path = tempfile.mkstemp(suffix=".bin")
     os.close(fd)

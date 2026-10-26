@@ -1,6 +1,6 @@
-# kaon
+# research (Rheo strategies)
 
-Kaon is a synchronous dataflow DSL for trading strategies, embedded in OCaml,
+Rheo is a synchronous dataflow DSL for trading strategies, embedded in OCaml,
 together with a bar-by-bar backtesting engine built on it.
 
 A strategy is a graph of typed signals. Kaon compiles that graph once into a
@@ -11,11 +11,14 @@ values, and strategy code contains no mutable state.
 The tracked project is deliberately small and OCaml-only:
 
 ```
-protocol/ohlc.md          binary input format
-rheo/lib/             DSL (Rheo), compiler, broker, OMS, reporting
-strategies/           strategy executables (main, baseline)
-rheo/examples/        executable DSL examples
-rheo/test/            semantics test suites
+../docs/protocol/ohlc.md  binary input format
+../rheo/lib/          DSL (Rheo), compiler, broker, OMS, reporting
+strategies/           strategy executables
+../rheo/examples/     executable DSL examples
+../rheo/test/         semantics test suites
+../rheo-backtest/     backtesting harness
+analysis/             Python analysis and reporting
+emitters/             OHLC emitters
 ```
 
 `_opam/`, `_build/`, `data/`, `scratch/`, and generated `*.csv`,
@@ -23,15 +26,18 @@ rheo/test/            semantics test suites
 
 ## Build and test
 
-Requires OCaml 5.x and dune >= 3.24; the only library dependency is `unix`.
-There is no local `_opam` switch; build with the active opam switch (5.4.0,
-`ocaml-base-compiler.5.4.0`):
+Requires OCaml 5.5.2 and dune >= 3.24; run from the repository root:
 
 ```sh
-opam switch 5.4.0
-eval $(opam env)
+../scripts/bootstrap.sh
 dune build
 dune runtest
+```
+
+Strategy executables are built under `_build/default/research/strategies/`:
+
+```sh
+dune exec research/strategies/chandelier.exe
 ```
 
 The examples need no input data:
@@ -45,7 +51,7 @@ dune exec rheo/examples/breakout.exe  # recurrence bootstrapping
 
 | Module | Role |
 | --- | --- |
-| `lib/ast.ml` | GADT signal definitions and the small node AST |
+| `../rheo/lib/ast.ml` | GADT signal definitions and the small node AST |
 | `lib/registry.ml` | node creation, dependency rank, `Pre` hash-consing |
 | `lib/graph.ml` | graph-level constructors (`input`, `pre`, `recurrence`, ...) |
 | `lib/dsl_intf.ml` | the public DSL signature |
@@ -342,17 +348,16 @@ Bars must be in chronological order. The reader refuses to read from a
 terminal and treats a partial trailing record as an error. See
 `protocol/ohlc.md`.
 
-A local data emitter lives in `data/` in this working tree, but that
-directory is ignored and is not part of the repository. Any producer that
+A local data emitter lives in `emitters/`; that directory's output is ignored. Any producer that
 writes the 40-byte format can drive the engine:
 
 ```sh
-producer | dune exec strategies/main.exe > out.csv
+producer | dune exec research/strategies/chandelier.exe > out.csv
 ```
 
 ## Extending the DSL
 
-The AST is intentionally small (`lib/ast.ml`): `Undefined`, `Input`, `Const`,
+The AST is intentionally small (`../rheo/lib/ast.ml`): `Undefined`, `Input`, `Const`,
 `Pure`, `Pre`, `Knot`, `Rec`, `Map`, `Map2`, `Gmap`, `Gmap2`. Derived
 combinators are built from these rather than added to the AST.
 

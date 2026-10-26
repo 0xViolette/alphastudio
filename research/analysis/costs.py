@@ -1,7 +1,7 @@
 """Shared cost + period configuration for the Python report/plot scripts.
 
 The OCaml binary owns the defaults and the rate card. This module fetches its
-schema from tools/costs_schema.json (regenerated via `rheo-backtest --schema`),
+schema from rheo-backtest/costs_schema.json (regenerated via `rheo-backtest --schema`),
 prompts for a cost model and a backtest period on a TTY, and turns the answers
 into flags passed after `dune exec <target> --`. The period (--from/--till,
 YYYY-MM-DD, IST) defaults to the full data range; the wizard shows the range
@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 # the CSV the emitter (plot_pnl.EMITTER) streams; bounds are read directly
 # from it so the wizard can name the usable --from/--till range
-DATA_CSV = ROOT / "data" / "new_data.csv"
+DATA_CSV = ROOT / "data" / "raw" / "new_data.csv"
 
 # knob key -> (short prompt name, unit suffix)
 _PROMPT = {
@@ -41,8 +41,8 @@ _PROMPT = {
 
 @lru_cache(maxsize=1)
 def schema() -> dict:
-    """Defaults, presets, knobs and statutory rates from tools/costs_schema.json."""
-    path = ROOT / "tools" / "costs_schema.json"
+    """Defaults, presets, knobs and statutory rates from rheo-backtest/costs_schema.json."""
+    path = ROOT / "rheo-backtest" / "costs_schema.json"
     try:
         return json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:

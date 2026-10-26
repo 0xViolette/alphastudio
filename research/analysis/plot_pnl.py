@@ -1,7 +1,7 @@
 """Run the strategy on the data and plot the printed net PnL.
 
 Pipeline (run from the strategy/ project root):
-    python ../local_data/ohlc_csv_emitter.py | dune exec bin/main.exe
+    python research/emitters/ohlc_csv_emitter.py | dune exec research/strategies/<name>.exe
 
 Usage: python3 scripts/plot_pnl.py [meanrev|main] [--out pnl.png]
 
@@ -29,15 +29,15 @@ from pathlib import Path
 import costs as cost_cli
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-EMITTER = ROOT / "tools" / "emitters" / "ohlc_csv_emitter.py"
-OUT_PNG = ROOT / "out" / "pnl.png"
+EMITTER = ROOT / "research" / "emitters" / "ohlc_csv_emitter.py"
+OUT_PNG = ROOT / "reports" / "plots" / "pnl.png"
 
 
 def strategies() -> dict[str, str]:
     """Selectable strategies: every bin/<name>.ml maps to `dune exec
     bin/<name>.exe`. Adding a strategy file (plus a stanza in bin/dune)
     makes it available everywhere; nothing here names a strategy."""
-    return {p.stem: f"strategies/{p.stem}.exe" for p in sorted((ROOT / "strategies").glob("*.ml"))}
+    return {p.stem: f"research/strategies/{p.stem}.exe" for p in sorted((ROOT / "research" / "strategies").glob("*.ml"))}
 
 
 STRATEGIES = strategies()

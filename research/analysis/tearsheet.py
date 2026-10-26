@@ -53,7 +53,7 @@ from plot_pnl import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-OUT_PNG = ROOT / "out" / "tearsheet.png"
+OUT_PNG = ROOT / "reports" / "plots" / "tearsheet.png"
 
 W = 84  # report width, in terminal columns
 NORMAL = NormalDist()
@@ -1036,13 +1036,13 @@ def _prompt_output_files(args):
         raw = input("Export trades CSV? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input("  CSV file name (Enter = tearsheet_trades.csv): ").strip()
-            args.csv = Path(name) if name else ROOT / "out" / "tearsheet_trades.csv"
+            args.csv = Path(name) if name else ROOT / "reports" / "trade-logs" / "tearsheet_trades.csv"
 
     if args.export is None and "--export" not in sys.argv:
         raw = input("Export HTML report? (y/N): ").strip().lower()
         if raw in ("y", "yes"):
             name = input("  HTML file name (Enter = tearsheet_report.html): ").strip()
-            args.export = Path(name) if name else ROOT / "out" / "tearsheet_report.html"
+            args.export = Path(name) if name else ROOT / "reports" / "tearsheets" / "tearsheet_report.html"
 
     if (args.date_from is not None and args.date_till is not None
             and args.date_from > args.date_till):
@@ -1314,7 +1314,7 @@ def main():
         "--export",
         nargs="?",
         type=Path,
-        const=ROOT / "out" / "tearsheet_report.html",
+        const=ROOT / "reports" / "tearsheets" / "tearsheet_report.html",
         default=None,
         metavar="PATH",
         help="write a styled, self-contained HTML report instead of printing "
@@ -1324,7 +1324,7 @@ def main():
         "--csv",
         nargs="?",
         type=Path,
-        const=ROOT / "out" / "tearsheet_trades.csv",
+        const=ROOT / "reports" / "trade-logs" / "tearsheet_trades.csv",
         default=None,
         metavar="PATH",
         help="write a CSV trade log with timestamps, sides, prices, fees "

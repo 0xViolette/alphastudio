@@ -20,7 +20,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
-CSV = __import__("pathlib").Path(__file__).resolve().parents[2] / "data" / "nifty_atm_month1.csv"
+CSV = __import__("pathlib").Path(__file__).resolve().parents[2] / "data" / "raw" / "nifty_atm_month1.csv"
 STRUCT = struct.Struct("<Qdddd")
 IST = timezone(timedelta(hours=5, minutes=30))
 

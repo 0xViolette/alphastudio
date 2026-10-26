@@ -24,8 +24,8 @@ import tempfile
 
 import costs as cost_cli
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE = os.path.join(ROOT, "_build", "default", "bin", "main.exe")
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+EXE = os.path.join(ROOT, "_build", "default", "research", "strategies", "chandelier.exe")
 
 N_BARS = 300
 SEED = 42
@@ -179,7 +179,7 @@ def run_ocaml(bars, cost_argv=None):
     name -> [float] over the probe block of the CSV report (empty cell = nan),
     ohlc the parsed Open/High/Low/Close columns, filled a per-bar flag."""
     if not os.path.exists(EXE):
-        sys.exit(f"missing {EXE} — run: dune build bin/main.exe")
+        sys.exit(f"missing {EXE} — run: dune build research/strategies/chandelier.exe")
     blob = b"".join(struct.pack("<qdddd", *b) for b in bars)
     with tempfile.NamedTemporaryFile(delete=False) as f:
         f.write(blob)
@@ -199,7 +199,15 @@ def run_ocaml(bars, cost_argv=None):
 
     nan = float("nan")
     lines = proc.stdout.strip().splitlines()
-    header = lines[0].split(",")
+    header = None
+    for ln in lines:
+        parts = ln.split(",")
+        if "Date" in parts and "event" in parts:
+            header = parts
+            lines = lines[lines.index(ln):]
+            break
+    if header is None:
+        sys.exit("no CSV header in strategy output")
     start = header.index("Close") + 1
     idx_event = header.index("event")
     names = header[start:idx_event]

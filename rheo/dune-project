@@ -5,22 +5,22 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github ar7d3/alphastudio))
 
-(authors "Author Name <author@example.com>")
+(authors "AlphaStudio <alphastudio@example.com>")
 
-(maintainers "Maintainer Name <maintainer@example.com>")
+(maintainers "AlphaStudio <alphastudio@example.com>")
 
-(license LICENSE)
+(license MIT)
 
-(documentation https://url/to/documentation)
+(documentation https://github.com/ar7d3/alphastudio)
 
 (package
  (name rheo)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (synopsis "Rheo dataflow DSL for trading strategies")
+ (description "A synchronous dataflow DSL for trading strategies, embedded in OCaml, with a bar-by-bar backtesting engine.")
  (depends ocaml)
  (tags
-  ("add topics" "to describe" your project)))
+  ("trading" "dataflow" "dsl")))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

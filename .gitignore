@@ -21,7 +21,14 @@
 
 # Generated reports
 /reports/**
+!/reports/
 !/reports/.gitkeep
+!/reports/tearsheets/
+!/reports/tearsheets/.gitkeep
+!/reports/plots/
+!/reports/plots/.gitkeep
+!/reports/trade-logs/
+!/reports/trade-logs/.gitkeep
 
 # Local market data
 /data/raw/**
@@ -32,3 +39,6 @@
 # Local Dhan data and caches
 /research/ingest/dhan/data/
 /research/ingest/dhan/.cache/
+
+# Local Kilo plans/state
+/.kilo/
