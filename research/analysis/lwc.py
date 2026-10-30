@@ -1,21 +1,10 @@
-"""Fast candles chart via TradingView's Lightweight Charts (canvas-based).
+"""Fast, self-contained candlestick HTML via Lightweight Charts.
 
-plotly (even WebGL) tops out around a few thousand candles before pan/zoom
-get sluggish; Lightweight Charts is the canvas engine TradingView itself
-ships, built for 100k+ bars. This module renders the candles chart as one
-self-contained HTML file: the vendored library (scripts/vendor/
-lightweight-charts.js) and all series data are inlined, so it opens offline.
-
-Used by scripts/viz.py, which renders candles exclusively through this module
-(plotly is only used for the optional --png). The candles view also carries a
-toggleable lines/orders legend (every price-scale probe plus per-order-ID
-fill toggles), mark-to-market net equity and an underwater drawdown pane.
-
-With a synthetic-option replay in the context (scripts/synthetic.py) the
-equity pane gains a magenta dotted synthetic net-equity line, the price pane
-gains dotted cyan/orange ATM-pair round-trip connectors (legend-toggled with
-the futures win/loss connectors), and the hover box shows the synthetic
-equity next to the futures equity.
+Used by viz.py for interactive rendering; Plotly is reserved for static PNGs.
+The vendored library and all series data are inlined for offline use. The view
+includes probe/order toggles, mark-to-market equity, and underwater drawdown.
+An optional ctx["synthetic"] payload supplied by a caller adds synthetic equity
+and option-pair trade connectors; viz.py does not create that payload itself.
 """
 
 import json
@@ -33,7 +22,7 @@ CDN = ("https://unpkg.com/lightweight-charts@5.2.1/dist/"
 # Fill colors: one tight shade family per book \u2014 cool blues for long,
 # warm oranges for short \u2014 so the side of every fill is obvious from the
 # color family alone, while each ID keeps its own shade. Position matches the
-# role order declared in bin/*.ml (entry, stop, cover, trail on both sides).
+# role order declared in research/strategies/*.ml (entry, stop, cover, trail on both sides).
 LONG_COLORS = ("#2962ff", "#00b0ff", "#64b5f6", "#00b8d4")
 SHORT_COLORS = ("#ff9100", "#ffca28", "#ff4081", "#ff5252")
 
@@ -51,7 +40,7 @@ def _unix(dt):
 def _order_meta(ctx):
     """One legend entry per order ID that actually filled, colored by book.
 
-    IDs/actions/sides come from the enter_*/exit_* declarations in bin/*.ml
+    IDs/actions/sides come from the enter_*/exit_* declarations in research/strategies/*.ml
     (via viz.ORDER_SPECS); anything only present in the CSV is classified from
     TAG_ACTION or its fill direction. Entries sort first within each side.
     """
@@ -80,7 +69,7 @@ def _order_meta(ctx):
     orders.sort(key=lambda o: (o["group"] != "long", not o["entry"],
                                o["index"], o["id"]))
     # stable ID -> shade: rank the declared orders of each book by their
-    # bin/*.ml index, so a tag keeps its color even if some IDs never fill
+    # research/strategies/*.ml index, so a tag keeps its color even if some IDs never fill
     rank = {}
     for grp in ("long", "short"):
         known = sorted(ORDER_SPECS[t]["index"] for t in ORDER_SPECS
@@ -150,10 +139,10 @@ def build_payload(ctx):
     def segments(won):
         segs = []
         for t in ctx["trades"]:
-            if (t["pnl"] > 0) != won:
+            if (t.pnl > 0) != won:
                 continue
-            segs.append([[times[t["entry_i"]], round(t["entry_px"], 2)],
-                         [times[t["exit_i"]], round(t["exit_px"], 2)]])
+            segs.append([[times[t.entry_i], round(t.entry_price, 2)],
+                         [times[t.exit_i], round(t.exit_price, 2)]])
         return segs
 
     # flatten segments to a strictly-ascending [time, value|null] stream;

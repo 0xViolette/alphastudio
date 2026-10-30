@@ -8,7 +8,7 @@ small instruction machine, then steps it over a stream of OHLC bars. Time is
 explicit (`pre`, `delay`, `window`, `recurrence`), warmup is ordinary optional
 values, and strategy code contains no mutable state.
 
-The tracked project is deliberately small and OCaml-only:
+The strategy engine is OCaml; analysis and reporting use Python:
 
 ```
 ../docs/protocol/ohlc.md  binary input format
@@ -17,7 +17,7 @@ strategies/           strategy executables
 ../rheo/examples/     executable DSL examples
 ../rheo/test/         semantics test suites
 ../rheo-backtest/     backtesting harness
-analysis/             Python analysis and reporting
+analysis/             Python tearsheets and candlestick visualization
 emitters/             OHLC emitters
 ```
 
@@ -253,6 +253,9 @@ for a real strategy, feed bars from the backtest harness instead.
 - `Account.cash`, `Account.initial_balance`, `Account.realised_pnl`,
 - `Position.direction` (`1.`, `0.`, `-1.`), `Position.open_lots`,
   `Position.entry_price`, `Position.avg_entry_price`,
+- `Position.is_long`, `is_short`, `is_flat`, `entered_long`, `entered_short`,
+  `entered_trade` (including direct reversals), and `exited_trade` (transition
+  to flat),
 - `Indicator` including `Ta`,
 - order constructors and `backtest`.
 
@@ -325,7 +328,7 @@ debit fees; limit fills do not slip.
 `Report.csv_row` emits:
 
 ```
-Date,Time,Open,High,Low,Close,<probes...>,event,fill_price,fill_qty,fill_cost
+Date,Time,Open,High,Low,Close,<probes...>,event,fill_id,fill_side,fill_price,fill_qty,fill_cost
 ```
 
 The report renders timestamps in IST (UTC+5:30) as `DD/MM/YY` and

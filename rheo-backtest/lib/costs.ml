@@ -21,117 +21,101 @@
    not model option premium cash flows, expiry, or exercise; positions are
    assumed to be squared off before expiry. *)
 
-type fill_ctx =
-  { side : Order.side
-  ; kind : float Order.kind
-  ; price : float (* raw fill price, before slippage *)
-  ; lots : float
-  ; lot_size : float
-  ; bar : Codec.Ohlc.bar
-  }
+type fill_ctx = {
+  side : Order.side;
+  kind : float Order.kind;
+  price : float; (* raw fill price, before slippage *)
+  lots : float;
+  lot_size : float;
+  bar : Codec.Ohlc.bar;
+}
 
-type result =
-  { slippage : float
-  ; fee : float
-  }
+type result = { slippage : float; fee : float }
+type preset = No_costs | Futures | Synthetic_futures | Simple
 
-type preset =
-  | No_costs
-  | Futures
-  | Synthetic_futures
-  | Simple
+type params = {
+  preset : preset;
+  slip_ticks : float;
+  slip_range_pct : float;
+  fee_per_order : float;
+  call_premium_pct : float;
+  put_premium_pct : float;
+  opt_slip_ticks : float;
+  opt_slip_pct : float;
+  tick_size_override : float option;
+  opt_tick_size : float;
+}
 
-type params =
-  { preset : preset
-  ; slip_ticks : float
-  ; slip_range_pct : float
-  ; fee_per_order : float
-  ; call_premium_pct : float
-  ; put_premium_pct : float
-  ; opt_slip_ticks : float
-  ; opt_slip_pct : float
-  ; tick_size_override : float option
-  ; opt_tick_size : float
-  }
-
-type t =
-  { name : string
-  ; desc : string
-  ; apply : fill_ctx -> result
-  }
+type t = { name : string; desc : string; apply : fill_ctx -> result }
 
 let as_of = "2026-10-22"
 
 (* Annual/statutory rates, in basis points of the relevant turnover. *)
-type rates =
-  { nse_futures_txn_bps : float
-  ; nse_options_txn_bps : float
-  ; sebi_bps : float
-  ; stt_futures_bps : float
-  ; stt_options_bps : float
-  ; stamp_futures_bps : float
-  ; stamp_options_bps : float
-  ; gst : float
-  }
+type rates = {
+  nse_futures_txn_bps : float;
+  nse_options_txn_bps : float;
+  sebi_bps : float;
+  stt_futures_bps : float;
+  stt_options_bps : float;
+  stamp_futures_bps : float;
+  stamp_options_bps : float;
+  gst : float;
+}
 
 let rates =
-  { nse_futures_txn_bps = 0.183
-  ; nse_options_txn_bps = 3.553
-  ; sebi_bps = 0.01
-  ; stt_futures_bps = 5.
-  ; stt_options_bps = 15.
-  ; stamp_futures_bps = 0.2
-  ; stamp_options_bps = 0.3
-  ; gst = 0.18
+  {
+    nse_futures_txn_bps = 0.183;
+    nse_options_txn_bps = 3.553;
+    sebi_bps = 0.01;
+    stt_futures_bps = 5.;
+    stt_options_bps = 15.;
+    stamp_futures_bps = 0.2;
+    stamp_options_bps = 0.3;
+    gst = 0.18;
   }
-;;
 
 let default_params =
-  { preset = Futures
-  ; slip_ticks = 1.
-  ; slip_range_pct = 1.
-  ; fee_per_order = 20.
-  ; call_premium_pct = 1.0
-  ; put_premium_pct = 0.8
-  ; opt_slip_ticks = 1.
-  ; opt_slip_pct = 0.5
-  ; tick_size_override = None
-  ; opt_tick_size = 0.05
+  {
+    preset = Futures;
+    slip_ticks = 1.;
+    slip_range_pct = 1.;
+    fee_per_order = 20.;
+    call_premium_pct = 1.0;
+    put_premium_pct = 0.8;
+    opt_slip_ticks = 1.;
+    opt_slip_pct = 0.5;
+    tick_size_override = None;
+    opt_tick_size = 0.05;
   }
-;;
 
 let preset_name = function
   | No_costs -> "none"
   | Futures -> "futures"
   | Synthetic_futures -> "synthetic_futures"
   | Simple -> "simple"
-;;
 
 let preset_of_string s =
   match String.lowercase_ascii (String.trim s) with
   | "none" | "off" | "zero" -> Some No_costs
   | "futures" | "india" | "india_futures" -> Some Futures
   | "synthetic" | "synthetic_futures" | "synth" | "options" ->
-    Some Synthetic_futures
+      Some Synthetic_futures
   | "simple" -> Some Simple
   | _ -> None
-;;
 
 let presets =
-  [ No_costs, "no costs, no slippage"
-  ; ( Futures
-    , "NSE index futures: NSE txn, SEBI, STT sell, stamp buy, GST" )
-  ; ( Synthetic_futures
-    , "synthetic futures via two option legs: 2x brokerage/txn/SEBI, \
-       STT on the sell leg, stamp on the buy leg" )
-  ; Simple, "flat fee per order plus slippage only"
+  [
+    (No_costs, "no costs, no slippage");
+    (Futures, "NSE index futures: NSE txn, SEBI, STT sell, stamp buy, GST");
+    ( Synthetic_futures,
+      "synthetic futures via two option legs: 2x brokerage/txn/SEBI, STT on \
+       the sell leg, stamp on the buy leg" );
+    (Simple, "flat fee per order plus slippage only");
   ]
-;;
 
 let validate p =
   let check name v =
-    if not (Float.is_finite v) || v < 0.
-    then
+    if (not (Float.is_finite v)) || v < 0. then
       invalid_arg
         (Printf.sprintf "costs: %s must be a finite number >= 0 (got %g)" name v)
   in
@@ -143,65 +127,49 @@ let validate p =
   check "opt_slip_ticks" p.opt_slip_ticks;
   check "opt_slip_pct" p.opt_slip_pct;
   (match p.tick_size_override with
-   | None -> ()
-   | Some v ->
-     if not (Float.is_finite v) || v <= 0.
-     then
-       invalid_arg
-         (Printf.sprintf
-            "costs: tick_size must be a finite number > 0 (got %g)"
-            v));
-  if not (Float.is_finite p.opt_tick_size) || p.opt_tick_size <= 0.
-  then
+  | None -> ()
+  | Some v ->
+      if (not (Float.is_finite v)) || v <= 0. then
+        invalid_arg
+          (Printf.sprintf
+             "costs: tick_size must be a finite number > 0 (got %g)" v));
+  if (not (Float.is_finite p.opt_tick_size)) || p.opt_tick_size <= 0. then
     invalid_arg
       (Printf.sprintf
          "costs: opt_tick_size must be a finite number > 0 (got %g)"
          p.opt_tick_size)
-;;
 
 let none =
-  { name = "none"
-  ; desc = "no costs, no slippage"
-  ; apply = (fun _ -> { slippage = 0.; fee = 0. })
+  {
+    name = "none";
+    desc = "no costs, no slippage";
+    apply = (fun _ -> { slippage = 0.; fee = 0. });
   }
-;;
 
 (* NSE price steps: 0.05 below 15,000; 0.10 from 15,000 to 30,000; 0.20 above. *)
 let tick_size_for_price price =
-  if price < 15_000.
-  then 0.05
-  else if price < 30_000.
-  then 0.10
-  else 0.20
-;;
+  if price < 15_000. then 0.05 else if price < 30_000. then 0.10 else 0.20
 
 let tick_size p ctx =
   Option.value p.tick_size_override ~default:(tick_size_for_price ctx.price)
-;;
 
 (* ---- slippage parts: fill_ctx -> price units ---- *)
 
 let slip_ticks n ~tick_size_ _ = n *. tick_size_
+
 let slip_range_frac f ctx =
   let b = ctx.bar in
   f *. (b.Codec.Ohlc.high -. b.Codec.Ohlc.low)
-;;
 
-let slip_sum parts ctx =
-  List.fold_left (fun acc f -> acc +. f ctx) 0. parts
-;;
+let slip_sum parts ctx = List.fold_left (fun acc f -> acc +. f ctx) 0. parts
 
 (* ---- fee parts: fill_ctx -> currency ---- *)
 
 let turnover ctx = ctx.price *. ctx.lots *. ctx.lot_size
 let fee_per_order amt _ = amt
-
 let fee_bps turnover_bps turnover = turnover_bps *. 1e-4 *. turnover
 let fee_bps_on_turnover bps ctx = fee_bps bps (turnover ctx)
-
-let fee_sum parts ctx =
-  List.fold_left (fun acc f -> acc +. f ctx) 0. parts
-;;
+let fee_sum parts ctx = List.fold_left (fun acc f -> acc +. f ctx) 0. parts
 
 (* GST-style tax on a sub-sum of other fee parts *)
 let tax_on rate parts ctx = rate *. fee_sum parts ctx
@@ -210,9 +178,10 @@ let tax_on rate parts ctx = rate *. fee_sum parts ctx
 
 let make ~name ~desc ~slip ~fee () =
   let open Order in
-  { name
-  ; desc
-  ; apply =
+  {
+    name;
+    desc;
+    apply =
       (fun ctx ->
         (* market and stop orders cross the spread; limit fills rest at
             their price and never slip *)
@@ -221,18 +190,11 @@ let make ~name ~desc ~slip ~fee () =
           | Market | Stop _ -> Float.max 0. (slip ctx)
           | Limit _ -> 0.
         in
-        let dir =
-          match ctx.side with
-          | Buy -> 1.
-          | Sell -> -1.
-        in
+        let dir = Float.of_int (sign_of_side ctx.side) in
         let exec_price = ctx.price +. (dir *. slippage) in
         (* turnover-based fees are charged on the executed price *)
-        { slippage
-        ; fee = Float.max 0. (fee { ctx with price = exec_price })
-        })
+        { slippage; fee = Float.max 0. (fee { ctx with price = exec_price }) });
   }
-;;
 
 let futures p =
   let brokerage = fee_per_order p.fee_per_order in
@@ -249,42 +211,31 @@ let futures p =
     | Order.Sell -> 0.
   in
   let gst = tax_on rates.gst [ brokerage; txn; sebi ] in
-  make
-    ~name:"futures"
+  make ~name:"futures"
     ~desc:
       (Printf.sprintf
          "futures (NSE, rates as of %s): slip %.2g tick + %g%% bar range \
           (mkt/stop); fee flat %g + txn 0.183bps + sebi 0.01bps + stt \
           5bps(sell) + stamp 0.2bps(buy) + 18%% GST on (flat+txn+sebi)"
-         as_of
-         p.slip_ticks
-         p.slip_range_pct
-         p.fee_per_order)
-    ~slip:
-      (fun ctx ->
-        slip_sum
-          [ slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx)
-          ; slip_range_frac (p.slip_range_pct /. 100.)
-          ]
-          ctx)
+         as_of p.slip_ticks p.slip_range_pct p.fee_per_order)
+    ~slip:(fun ctx ->
+      slip_sum
+        [
+          slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx);
+          slip_range_frac (p.slip_range_pct /. 100.);
+        ]
+        ctx)
     ~fee:(fee_sum [ brokerage; txn; sebi; stt; stamp; gst ])
     ()
-;;
 
 let simple p =
-  make
-    ~name:"simple"
+  make ~name:"simple"
     ~desc:
-      (Printf.sprintf
-         "simple: slip %.2g tick (mkt/stop); fee flat %g"
-         p.slip_ticks
-         p.fee_per_order)
-    ~slip:
-      (fun ctx ->
-        slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx) ctx)
+      (Printf.sprintf "simple: slip %.2g tick (mkt/stop); fee flat %g"
+         p.slip_ticks p.fee_per_order)
+    ~slip:(fun ctx -> slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx) ctx)
     ~fee:(fee_per_order p.fee_per_order)
     ()
-;;
 
 let synthetic p =
   let call_premium ctx = p.call_premium_pct /. 100. *. ctx.price in
@@ -310,29 +261,21 @@ let synthetic p =
   let gst = tax_on rates.gst [ brokerage; txn; sebi ] in
   let leg_slip premium ctx =
     (p.opt_slip_ticks *. p.opt_tick_size)
-    +. ((p.opt_slip_pct /. 100.) *. premium ctx)
+    +. (p.opt_slip_pct /. 100. *. premium ctx)
   in
-  make
-    ~name:"synthetic_futures"
+  make ~name:"synthetic_futures"
     ~desc:
       (Printf.sprintf
-         "synthetic futures (options, rates as of %s): call premium %g%%, \
-          put premium %g%%; slip per leg %.2g x %.2g tick + %g%% premium \
+         "synthetic futures (options, rates as of %s): call premium %g%%, put \
+          premium %g%%; slip per leg %.2g x %.2g tick + %g%% premium \
           (mkt/stop); fee 2 x flat %g + txn 3.553bps + sebi 0.01bps on both \
           legs + stt 15bps(sell leg) + stamp 0.3bps(buy leg) + 18%% GST on \
           (brokerage+txn+sebi)"
-         as_of
-         p.call_premium_pct
-         p.put_premium_pct
-         p.opt_slip_ticks
-         p.opt_tick_size
-         p.opt_slip_pct
-         p.fee_per_order)
-    ~slip:(fun ctx ->
-      leg_slip call_premium ctx +. leg_slip put_premium ctx)
+         as_of p.call_premium_pct p.put_premium_pct p.opt_slip_ticks
+         p.opt_tick_size p.opt_slip_pct p.fee_per_order)
+    ~slip:(fun ctx -> leg_slip call_premium ctx +. leg_slip put_premium ctx)
     ~fee:(fee_sum [ brokerage; txn; sebi; stt; stamp; gst ])
     ()
-;;
 
 let of_params p =
   validate p;
@@ -341,56 +284,33 @@ let of_params p =
   | Futures -> futures p
   | Synthetic_futures -> synthetic p
   | Simple -> simple p
-;;
 
-type knob =
-  { key : string
-  ; label : string
-  ; unit : string
-  ; default : float
-  ; min : float
-  ; applies_to : string list
-  }
+type knob = {
+  key : string;
+  label : string;
+  unit : string;
+  default : float;
+  min : float;
+  applies_to : string list;
+}
 
 let knob ?(unit = "") ?(min = 0.) key label default applies_to =
   { key; label; unit; default; min; applies_to }
-;;
 
 let knobs =
-  [ knob
-      "slip_ticks"
-      "Slippage ticks"
-      default_params.slip_ticks
-      [ "futures"; "simple" ]
-  ; knob
-      "slip_range_pct"
-      "Slippage % of bar range"
-      default_params.slip_range_pct
-      [ "futures" ]
-  ; knob
-      "fee_per_order"
-      "Flat fee per order"
-      default_params.fee_per_order
-      [ "futures"; "synthetic_futures"; "simple" ]
-  ; knob
-      "call_premium_pct"
-      "Call premium % of underlying"
-      default_params.call_premium_pct
-      [ "synthetic_futures" ]
-  ; knob
-      "put_premium_pct"
-      "Put premium % of underlying"
-      default_params.put_premium_pct
-      [ "synthetic_futures" ]
-  ; knob
-      "opt_slip_ticks"
-      "Option slippage ticks per leg"
-      default_params.opt_slip_ticks
-      [ "synthetic_futures" ]
-  ; knob
-      "opt_slip_pct"
-      "Option slippage % of premium"
-      default_params.opt_slip_pct
-      [ "synthetic_futures" ]
+  [
+    knob "slip_ticks" "Slippage ticks" default_params.slip_ticks
+      [ "futures"; "simple" ];
+    knob "slip_range_pct" "Slippage % of bar range"
+      default_params.slip_range_pct [ "futures" ];
+    knob "fee_per_order" "Flat fee per order" default_params.fee_per_order
+      [ "futures"; "synthetic_futures"; "simple" ];
+    knob "call_premium_pct" "Call premium % of underlying"
+      default_params.call_premium_pct [ "synthetic_futures" ];
+    knob "put_premium_pct" "Put premium % of underlying"
+      default_params.put_premium_pct [ "synthetic_futures" ];
+    knob "opt_slip_ticks" "Option slippage ticks per leg"
+      default_params.opt_slip_ticks [ "synthetic_futures" ];
+    knob "opt_slip_pct" "Option slippage % of premium"
+      default_params.opt_slip_pct [ "synthetic_futures" ];
   ]
-;;

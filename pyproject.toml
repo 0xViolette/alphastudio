@@ -1,0 +1,25 @@
+[project]
+name = "alphastudio"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "0xViolette", email = "violettether@gmail.com" }
+]
+requires-python = ">=3.13.18"
+dependencies = [
+    "dotenv>=0.9.9",
+    "ipython>=9.17.1",
+    "matplotlib>=3.11.2",
+    "nubra-sdk>=0.5.4",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
+    "polars>=2.1.0",
+]
+
+[project.scripts]
+alphastudio = "alphastudio:main"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"

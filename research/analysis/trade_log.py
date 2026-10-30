@@ -1,125 +1,9 @@
-"""Trade-log helpers for tearsheets."""
+"""Trade-log generation and CSV writers for tearsheets."""
 
-import argparse
 import csv
-import io
-import sys
-from datetime import date, datetime
-from pathlib import Path
 
 import costs as cost_cli
-from config import ROOT, OUT_PNG
 
-
-def side_for(tag):
-    import tearsheet
-    return tearsheet.side_for(tag)
-
-
-def _date_arg(value):
-    """Parse an ISO date supplied through --from / --till."""
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError) as exc:
-        raise argparse.ArgumentTypeError(
-            f"invalid date {value!r}; expected YYYY-MM-DD"
-        ) from exc
-
-def _prompt_date_window(args):
-    """Collect missing date bounds as part of the CLI wizard.
-
-    Blank input means the first/last available data date. Prompts are printed
-    and flushed explicitly, and are not gated on stdin.isatty(), so they remain
-    visible in IDE terminals and other CLI launchers. If stdin is unavailable,
-    EOF keeps the default (the full available range).
-    """
-    def ask_date(prompt):
-        while True:
-            sys.stdout.write(prompt)
-            sys.stdout.flush()
-            try:
-                raw = sys.stdin.readline()
-            except (EOFError, OSError):
-                return None
-            if raw == "":  # EOF in non-interactive execution
-                return None
-            raw = raw.strip()
-            if not raw:
-                return None
-            try:
-                return date.fromisoformat(raw)
-            except ValueError:
-                print("Please enter a date in YYYY-MM-DD format, or press Enter.")
-
-    if args.date_from is None or args.date_till is None:
-        print("\nREPORT DATE WINDOW")
-        print("Enter dates as YYYY-MM-DD. Press Enter to use the full available range.")
-        if args.date_from is None:
-            args.date_from = ask_date("From date (Enter = earliest available): ")
-        if args.date_till is None:
-            args.date_till = ask_date("To date   (Enter = latest available): ")
-
-def _prompt_output_files(args):
-    """Prompt for output file names when running interactively."""
-    if not sys.stdin.isatty():
-        return
-
-    def ask(prompt):
-        try:
-            return input(prompt)
-        except (EOFError, OSError):
-            return ""
-
-    if args.out == OUT_PNG and "--out" not in sys.argv:
-        print("\nOUTPUT FILES")
-        raw = ask(f"PNG file name (Enter = {OUT_PNG.name}): ").strip()
-        if raw:
-            args.out = Path(raw)
-
-    if args.csv is None and "--csv" not in sys.argv:
-        raw = ask("Export trades CSV? (y/N): ").strip().lower()
-        if raw in ("y", "yes"):
-            name = ask("  CSV file name (Enter = tearsheet_trades.csv): ").strip()
-            args.csv = Path(name) if name else ROOT / "reports" / "trade-logs" / "tearsheet_trades.csv"
-
-    if args.export is None and "--export" not in sys.argv:
-        raw = ask("Export HTML report? (y/N): ").strip().lower()
-        if raw in ("y", "yes"):
-            name = ask("  HTML file name (Enter = tearsheet_report.html): ").strip()
-            args.export = Path(name) if name else ROOT / "reports" / "tearsheets" / "tearsheet_report.html"
-
-    if (args.date_from is not None and args.date_till is not None
-            and args.date_from > args.date_till):
-        sys.exit("--from must be on or before --till")
-
-def _select_date_window(date_from, date_till, bars):
-    """Resolve optional dates against the emitted data and return bar indices."""
-    available_from = min(dt.date() for dt, _, _ in bars)
-    available_till = max(dt.date() for dt, _, _ in bars)
-    date_from = date_from or available_from
-    date_till = date_till or available_till
-
-    print(
-        f"\nAvailable data: {available_from.isoformat()} to "
-        f"{available_till.isoformat()} (inclusive)."
-    )
-    if date_from > date_till:
-        sys.exit("--from must be on or before --till")
-
-    indices = [
-        i for i, (dt, _, _) in enumerate(bars)
-        if date_from <= dt.date() <= date_till
-    ]
-    if not indices:
-        sys.exit(
-            f"no bars in requested date range {date_from} to {date_till}; "
-            f"available data is {available_from} to {available_till}"
-        )
-
-    actual_from = bars[indices[0]][0].date()
-    actual_till = bars[indices[-1]][0].date()
-    print(f"Reporting window: {actual_from.isoformat()} to {actual_till.isoformat()}\n")
-    return indices
 
 def _generate_trade_log(bars, preset, values, lot_size):
     """Generate a trade log from bars by tracking position.
@@ -129,8 +13,10 @@ def _generate_trade_log(bars, preset, values, lot_size):
     trade_log = []
     position = 0.0  # signed lots currently held
 
-    for dt, close, fills in bars:
-        for side, price, qty, fee in fills:
+    for bar in bars:
+        dt = bar.dt
+        for fill in bar.fills:
+            side, price, qty, fee = fill.side, fill.price, fill.qty, fill.fee
             delta = side * qty
             closing = position != 0 and (position > 0) != (delta > 0)
             reversing = closing and abs(delta) > abs(position)
@@ -222,39 +108,20 @@ def _cost_breakup_simple(
 
 def _cost_breakup_synthetic_futures(price, qty, side, lot_size, values, rates):
     """Compute cost breakup for synthetic_futures cost model (estimated premiums)."""
-    call_prem_pct = values.get("call_premium_pct", 1.0)
-    put_prem_pct = values.get("put_premium_pct", 0.8)
-    call_px = price * call_prem_pct / 100.0
-    put_px = price * put_prem_pct / 100.0
-    opt_tick = values.get("opt_tick_size", 0.05)
-    opt_slip_ticks = values.get("opt_slip_ticks", 1.0)
-    opt_slip_pct = values.get("opt_slip_pct", 0.5)
+    call_px = price * values.get("call_premium_pct", 1.0) / 100.0
+    put_px = price * values.get("put_premium_pct", 0.8) / 100.0
 
-    def leg(side, px):
-        turnover = px * qty * lot_size
-        brokerage = values.get("fee_per_order", 20.0)
-        txn = rates["nse_options_txn_bps"] * 1e-4 * turnover
-        sebi = rates["sebi_bps"] * 1e-4 * turnover
-        stt = rates["stt_options_bps"] * 1e-4 * turnover if side < 0 else 0.0
-        stamp = rates["stamp_options_bps"] * 1e-4 * turnover if side > 0 else 0.0
-        gst = rates["gst"] * (brokerage + txn + sebi)
-        return brokerage, txn, sebi, stt, stamp, gst
+    def leg(leg_side, premium):
+        return cost_cli.option_leg_breakup(
+            leg_side, premium, qty, lot_size,
+            values.get("fee_per_order", 20.0), rates,
+        )
 
-    if side > 0:  # long: buy CE + sell PE
-        b1, t1, s1, stt1, stamp1, g1 = leg(1, call_px)
-        b2, t2, s2, stt2, stamp2, g2 = leg(-1, put_px)
-    else:  # short: sell CE + buy PE
-        b1, t1, s1, stt1, stamp1, g1 = leg(-1, call_px)
-        b2, t2, s2, stt2, stamp2, g2 = leg(1, put_px)
-
-    return {
-        "brokerage": b1 + b2,
-        "txn": t1 + t2,
-        "sebi": s1 + s2,
-        "stt": stt1 + stt2,
-        "stamp": stamp1 + stamp2,
-        "gst": g1 + g2,
-    }
+    if side > 0:
+        leg1, leg2 = leg(1, call_px), leg(-1, put_px)
+    else:
+        leg1, leg2 = leg(-1, call_px), leg(1, put_px)
+    return {key: leg1[key] + leg2[key] for key in leg1}
 
 def _write_trade_log_csv(path, trade_log, preset, values, lot_size):
     """Write trade log to CSV with format depending on cost model."""
@@ -363,4 +230,41 @@ def _write_trade_log_csv(path, trade_log, preset, values, lot_size):
                     f"{entry['price']:.2f}",
                     "0.00",
                 ])
+
+
+def write_synthetic_trade_log(path, trade_log):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "timestamp", "action", "futures_side", "option_legs",
+            "qty", "price", "strike_price", "call_premium", "put_premium",
+            "fee", "contract", "is_rollover",
+            "brokerage", "txn_fee", "sebi_fee", "stt", "stamp", "gst",
+            "slippage_call", "slippage_put",
+        ])
+        for entry in trade_log:
+            bk = entry.get("cost_breakup", {})
+            writer.writerow([
+                entry["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+                entry["action"],
+                entry["futures_side"],
+                entry["option_legs"],
+                entry["qty"],
+                f"{entry['price']:.2f}",
+                f"{entry['strike_price']:.2f}",
+                f"{bk['call_premium']:.4f}",
+                f"{bk['put_premium']:.4f}",
+                f"{entry['fee']:.2f}",
+                entry["contract"],
+                entry["is_rollover"],
+                f"{bk.get('brokerage', 0):.2f}",
+                f"{bk.get('txn', 0):.2f}",
+                f"{bk.get('sebi', 0):.2f}",
+                f"{bk.get('stt', 0):.2f}",
+                f"{bk.get('stamp', 0):.2f}",
+                f"{bk.get('gst', 0):.2f}",
+                f"{bk.get('slippage_call', 0):.4f}",
+                f"{bk.get('slippage_put', 0):.4f}",
+            ])
 

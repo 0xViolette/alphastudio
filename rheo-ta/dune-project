@@ -1,0 +1,22 @@
+(lang dune 3.24)
+
+(name rheo-ta)
+
+(generate_opam_files true)
+
+(source
+ (github 0xViolette/alphastudio))
+
+(authors "Violette")
+
+(maintainers "Violette")
+
+(license MIT)
+
+(package
+ (name rheo-ta)
+ (synopsis "Indicators for the Rheo dataflow DSL")
+ (description "Reusable indicators constructed from Rheo's public dataflow combinators.")
+ (depends ocaml rheo)
+ (tags
+  ("trading" "dataflow" "technical analysis")))

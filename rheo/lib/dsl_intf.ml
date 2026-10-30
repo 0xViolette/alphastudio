@@ -4,7 +4,6 @@ module type S = sig
   type 'a signal
   type set = Set : 'a signal * 'a -> set
 
-  val mul : float signal -> float signal -> float signal
   val tick : float signal
 
   (* stepping and reading are only meaningful on a frozen graph, so both
@@ -44,6 +43,8 @@ module type S = sig
     val sqrt : float signal -> float signal
     val floor : float signal -> float signal
     val ceil : float signal -> float signal
+    val max : float signal -> float signal -> float signal
+    val min : float signal -> float signal -> float signal
   end
 
   val cond : bool signal -> 'a signal -> 'a signal -> 'a signal
@@ -69,16 +70,4 @@ module type S = sig
   val lift2 : ('a -> 'b -> 'c) -> 'a signal -> 'b signal -> 'c signal
   val ( <*> ) : ('a -> 'b) signal -> 'a signal -> 'b signal
   val read : (unit -> 'b option) -> 'b signal
-
-  module Indicator : sig
-    val max : float signal -> float signal -> float signal
-    val min : float signal -> float signal -> float signal
-    val sma : int -> float signal -> float signal
-    val ema : int -> float signal -> float signal
-    val crossover : float signal -> float signal -> bool signal
-    val crossunder : float signal -> float signal -> bool signal
-    val highest : int -> float signal -> float signal
-    val lowest : int -> float signal -> float signal
-    val bars_since : bool signal -> float signal
-  end
 end

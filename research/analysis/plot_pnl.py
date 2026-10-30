@@ -6,27 +6,23 @@ Pipeline (run from the strategy/ project root):
 Usage: python3 scripts/plot_pnl.py [meanrev|main] [--out pnl.png]
 
 The OCaml backtester prints one CSV row per bar on stdout:
-    Date,Time,Open,High,Low,Close,<probes...>,event,fill_price,fill_qty,fill_cost
+    Date,Time,Open,High,Low,Close,<probes...>,event,fill_id,fill_side,fill_price,fill_qty,fill_cost
 
-Fills appear in `event` ("<tag> filled", several pipe-separated per bar)
-with their price, qty and per-fill fees in the last three columns. We
-replay those fills through the same lot-offsetting ledger lib/ledger.ml
-uses, subtracting each fill's fees, giving the realized net pnl after
-every fill, and plot initial_balance + realized. Slippage is already
-embedded in fill_price. Costs, lot size and the initial balance come from
-the shared cost wizard in scripts/costs.py (or its flags); the OCaml binary
-owns the defaults.
+Fill fields are pipe-separated in matching order. We replay those fills
+through the same lot-offsetting ledger lib/ledger.ml uses, subtracting each
+fill's fees, giving the realized net pnl after every fill, and plot
+initial_balance + realized. Slippage is already embedded in fill_price.
+Costs, lot size and the initial balance come from the shared cost wizard in
+scripts/costs.py (or its flags); the OCaml binary owns the defaults.
 """
 
 import argparse
-import csv
-import io
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import costs as cost_cli
+from engine import parse_stream
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 EMITTER = ROOT / "research" / "emitters" / "ohlc_csv_emitter.py"
@@ -42,39 +38,6 @@ def strategies() -> dict[str, str]:
 
 STRATEGIES = strategies()
 DEFAULT_STRATEGY = "main" if "main" in STRATEGIES else next(iter(STRATEGIES), "")
-
-NUM = r"([-+0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?)"
-
-# order tag -> direction of its fill (+1 buy / -1 sell), mirroring the
-# enter_*/exit_* calls in bin/*.ml. A tag the script
-# does not know is a hard error rather than a silently wrong plot.
-TAGS = {}
-
-
-def side_for(tag):
-    if tag in TAGS:
-        return TAGS[tag]
-    if tag in SIDE_BY_TAG:
-        return SIDE_BY_TAG[tag]
-    raise KeyError(tag)
-
-
-SIDE_BY_TAG = {
-    "LE": +1,  # enter_long
-    "SE": -1,  # enter_short
-    "2NL": -1,  # exit_long
-    "2NS": +1,  # exit_short
-    "TRL": -1,
-    "TRS": 1,
-    "LE cover": +1,  # exit_short
-    "SE cover": -1,  # exit_long
-    "TP_L": -1,  # exit_long
-    "SL_L": -1,  # exit_long
-    "TS_L": -1,  # exit_long
-    "TP_S": +1,  # exit_short
-    "SL_S": +1,  # exit_short
-    "TS_S": +1,  # exit_short
-}
 
 
 def ask_strategy(default: str = DEFAULT_STRATEGY) -> str:
@@ -139,66 +102,13 @@ def run_backtest(dune_target, cost_argv=None):
     return out, err
 
 
-def parse_tags(out):
-    """Parse the `# tags: TAG=+1 ...` manifest emitted by the strategy."""
-    tags = {}
-    for line in out.splitlines():
-        line = line.strip()
-        if not line.startswith("# tags:"):
-            continue
-        for tok in line[len("# tags:"):].split():
-            if "=" in tok:
-                name, side = tok.rsplit("=", 1)
-                tags[name] = int(side)
-    return tags
-
-
 def parse_rows(out):
-    """The backtest's fill stream as [(side, price, qty, datetime), ...]."""
-    lines = [ln for ln in out.splitlines() if not ln.lstrip().startswith("#")]
-    rows = list(csv.reader(io.StringIO("\n".join(lines))))
-    if not rows:
-        return []
-    # locate the CSV header row
-    header = None
-    for r in rows:
-        if r and "Date" in r and "event" in r:
-            header = r
-            # drop everything up to and including header
-            rows = rows[rows.index(r):]
-            break
-    if header is None:
-        return []
-    i_dt = header.index("Date")
-    i_tm = header.index("Time")
-    i_evt = header.index("event")
-    i_px = header.index("fill_price")
-    i_qt = header.index("fill_qty")
-    i_ct = header.index("fill_cost") if "fill_cost" in header else None
-    fills = []
-    for row in rows[1:]:
-        if not row or "filled" not in row[i_evt]:
-            continue
-        parts = [e.strip() for e in row[i_evt].split("|")]
-        events = [e for e in parts if e.endswith("filled")]
-        prices = row[i_px].split("|")
-        qtys = row[i_qt].split("|")
-        costs = row[i_ct].split("|") if i_ct is not None else ["0"] * len(events)
-        if not (len(events) == len(prices) == len(qtys) == len(costs)):
-            sys.exit(f"event/fill columns disagree on row {row[0:2]}: {row[i_evt:]}")
-        dt = datetime.strptime(row[i_dt] + " " + row[i_tm], "%m/%d/%y %I:%M %p")
-        for event, price, qty, cost in zip(events, prices, qtys, costs):
-            tag = event[: -len("filled")].strip()
-            try:
-                side = side_for(tag)
-            except KeyError:
-                sys.exit(
-                    f"unknown order tag {tag!r} in {event!r}; "
-                    f"add it to the strategy manifest or SIDE_BY_TAG"
-                )
-            fills.append((side, float(price), float(qty),
-                          float(cost or 0), dt))
-    return fills
+    """Return fills as [(side, price, qty, fee, datetime), ...] in order."""
+    return [
+        (fill.side, fill.price, fill.qty, fill.fee, bar.dt)
+        for bar in parse_stream(out).bars
+        for fill in bar.fills
+    ]
 
 
 def parse_fills(out):
@@ -266,8 +176,6 @@ def main():
     initial = cfg.initial_balance
     lot_size = cfg.lot_size
     out, err = run_backtest(STRATEGIES[strategy], cfg.argv())
-    global TAGS
-    TAGS = parse_tags(out)
     if args.save_log:
         args.save_log.write_text(out)
 

@@ -9,6 +9,8 @@ module Papa =
     end)
     ()
 
+module Ta = RheoTa.Ta.Make (Papa.D) (Papa.Env)
+
 let strat () =
   let open Papa in
   let open Papa.Ops in
@@ -18,18 +20,12 @@ let strat () =
   let atrgunak = 2. in
   let ma = 65 in
   let atrbars = 20 in
-  let le = Indicator.highest echannel high + !0.05 in
-  let se = Indicator.lowest echannel low - !0.05 in
-  let entered_long =
-    Position.direction > !0. && pre Position.direction <= !0.
-  in
-  let entered_short =
-    Position.direction < !0. && pre Position.direction >= !0.
-  in
-  let entered_trade = entered_long || entered_short in
-  let atr1 = Indicator.sma atrbars Indicator.tr in
-  let atr = Indicator.ema 20 atr1 in
-  let mov = Indicator.ema ma close in
+  let le = Ta.highest echannel high + !0.05 in
+  let se = Ta.lowest echannel low - !0.05 in
+  let entered_trade = Position.entered_trade in
+  let atr1 = Ta.sma atrbars Ta.tr in
+  let atr = Ta.ema 20 atr1 in
+  let mov = Ta.ema ma close in
   let netequity =
     (Account.initial_balance + Account.realised_pnl) * !leverage
   in
@@ -40,12 +36,12 @@ let strat () =
   let qty3 = netequity / (se * !lot_size) in
   let con3 = floor qty3 in
   let con4 = !2.0 in
-  let finalcon = Indicator.min con1 (Indicator.min con2 con3) in
-  let tradecon = Indicator.max finalcon con4 in
+  let finalcon = min con1 (min con2 con3) in
+  let tradecon = max finalcon con4 in
   (* let tradecon = Indicator.min !1. (Indicator.min finalcon con4) in *)
   let atr_at_entry =
     cond
-      (Indicator.bars_since entered_trade <= !50.)
+      (Ta.bars_since entered_trade <= !50.)
       (value_when entered_trade atr)
       (delay 50 atr)
   in
@@ -60,8 +56,8 @@ let strat () =
   let enter_short = enter_short "SE" tradecon (Stop se) bearish in
   let trail_mult = 2.0 in
   let trail_n = 22 in
-  let chand_l = Indicator.highest trail_n (high - (!trail_mult * atr)) in
-  let chand_s = Indicator.lowest trail_n low + (!trail_mult * atr) in
+  let chand_l = Ta.highest trail_n (high - (!trail_mult * atr)) in
+  let chand_s = Ta.lowest trail_n low + (!trail_mult * atr) in
   (* 1 *)
   let trail_l =
     exit_long "TRL" (Stop chand_l)
@@ -107,25 +103,9 @@ let strat () =
   in
   (orders, probes)
 
-let tags =
-  [
-    ("LE", 1);
-    ("SE", -1);
-    ("2NL", -1);
-    ("2NS", 1);
-    ("TRL", -1);
-    ("TRS", 1);
-    ("LE cover", 1);
-    ("SE cover", -1);
-  ]
-
 let () =
   let t0 = Sys.time () in
   let orders, probes = strat () in
-  Printf.printf "# tags:%s\n"
-    (tags
-    |> List.map (fun (t, d) -> Printf.sprintf " %s=%+d" t d)
-    |> String.concat "");
   Printf.printf "%s\n" (RheoBacktest.Report.csv_header (List.map fst probes));
   Papa.backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts ~probes
     ~on_bar:(fun r -> Printf.printf "%s\n" (RheoBacktest.Report.csv_row r))

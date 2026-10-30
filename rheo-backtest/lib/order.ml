@@ -1,33 +1,26 @@
-type side =
-  | Buy
-  | Sell
+type side = Buy | Sell
 
-type 'a kind =
-  | Market
-  | Limit of 'a
-  | Stop of 'a
+let sign_of_side = function Buy -> 1 | Sell -> -1
 
-type fill =
-  { id : string
-  ; side : side
-  ; price : float
-  ; lots : float
-  ; fees : float
-  }
+type 'a kind = Market | Limit of 'a | Stop of 'a
 
-type order =
-  { id : string
-  ; seq : int
-  ; side : side
-  ; kind : float kind
-  ; lots : float
-  }
+type fill = {
+  id : string;
+  side : side;
+  price : float;
+  lots : float;
+  fees : float;
+}
 
-type request =
-  { id : string
-  ; action : action
-  ; kind : float kind
-  }
+type order = {
+  id : string;
+  seq : int;
+  side : side;
+  kind : float kind;
+  lots : float;
+}
+
+type request = { id : string; action : action; kind : float kind }
 
 and action =
   | Enter_long of float

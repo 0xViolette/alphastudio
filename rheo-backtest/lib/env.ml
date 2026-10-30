@@ -3,8 +3,8 @@
 module Make
     (D : Rheo.Dsl.S)
     (B : sig
-       val broker : Broker.t
-     end) =
+      val broker : Broker.t
+    end) =
 struct
   let open_ : float D.signal = D.input ()
   let high : float D.signal = D.input ()
@@ -19,12 +19,19 @@ struct
   end
 
   module Position = struct
-    let open_lots : float D.signal = D.input ()
-    let direction : float D.signal = D.input ()
-    let entry_price = D.read (fun _ -> Broker.entry_price B.broker)
+    open D
+    open D.Ops
 
-    let avg_entry_price =
-      D.read (fun _ -> Broker.avg_entry_price B.broker)
-    ;;
+    let open_lots = input ()
+    let direction = input ()
+    let is_long = direction > !0.
+    let is_short = direction < !0.
+    let is_flat = direction = !0.
+    let entered_long = is_long && pre direction <= !0.
+    let entered_short = is_short && pre direction >= !0.
+    let entered_trade = entered_long || entered_short
+    let exited_trade = is_flat && pre direction <> !0.
+    let entry_price = D.read (fun _ -> Broker.entry_price B.broker)
+    let avg_entry_price = D.read (fun _ -> Broker.avg_entry_price B.broker)
   end
 end

@@ -42,3 +42,10 @@
 
 # Local Kilo plans/state
 /.kilo/
+
+
+
+.DS_Store
+/auth_data.db
+/*.txt
+/research/analysis/*.csv

@@ -8,5 +8,5 @@
  (name strategies)
  (synopsis "Kaon strategies")
  (description "Strategy executables built on the Rheo DSL")
- (depends ocaml rheo)
+ (depends ocaml unix rheo rheo-backtest rheo-ta)
  (tags (trading)))

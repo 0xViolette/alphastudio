@@ -5,7 +5,7 @@
 (generate_opam_files true)
 
 (source
- (github ar7d3/alphastudio))
+ (github 0xViolette/alphastudio))
 
 (authors "AlphaStudio <alphastudio@example.com>")
 
@@ -13,7 +13,7 @@
 
 (license MIT)
 
-(documentation https://github.com/ar7d3/alphastudio)
+(documentation https://github.com/0xViolette/alphastudio)
 
 (package
  (name rheo)

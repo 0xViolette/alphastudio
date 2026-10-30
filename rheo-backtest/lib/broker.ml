@@ -280,11 +280,7 @@ let next_fill (t : t) =
         ; bar = t.bar
         }
     in
-    let dir =
-      match o.side with
-      | Buy -> 1.
-      | Sell -> -1.
-    in
+    let dir = Float.of_int (sign_of_side o.side) in
     let price = exec.price +. (dir *. res.slippage) in
     let side =
       match o.side with

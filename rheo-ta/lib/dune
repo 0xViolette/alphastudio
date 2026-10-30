@@ -1,0 +1,4 @@
+(library
+ (name rheoTa)
+ (public_name rheo-ta)
+ (libraries rheo))

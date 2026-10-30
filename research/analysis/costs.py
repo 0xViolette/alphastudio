@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -23,7 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-# the CSV the emitter (plot_pnl.EMITTER) streams; bounds are read directly
+# the CSV the default engine emitter streams; bounds are read directly
 # from it so the wizard can name the usable --from/--till range
 DATA_CSV = ROOT / "data" / "raw" / "new_data.csv"
 
@@ -49,17 +48,13 @@ def schema() -> dict:
         sys.exit(f"could not read cost schema {path}: {exc}")
 
 
-@lru_cache(maxsize=1)
-def data_bounds() -> tuple[date | None, date | None]:
-    """(first, last) date covered by the backtest data (the emitter's CSV).
-
-    The CSV is chronological (protocol/ohlc.md), so the bounds are the first
-    data row and the last line: two small reads, no full scan. (None, None)
-    when the data cannot be read — the wizard then skips the period prompt.
-    """
+@lru_cache(maxsize=4)
+def data_bounds(csv_path=None) -> tuple[date | None, date | None]:
+    """(first, last) date covered by a chronological input CSV."""
+    path = Path(csv_path) if csv_path is not None else DATA_CSV
     try:
-        with DATA_CSV.open("rb") as f:
-            f.readline()  # header
+        with path.open("rb") as f:
+            f.readline()
             first = f.readline().split(b",", 1)[0].decode()
             f.seek(0, 2)
             pos, tail = f.tell(), b""
@@ -70,15 +65,15 @@ def data_bounds() -> tuple[date | None, date | None]:
                 tail = f.read(step) + tail
             last = [ln for ln in tail.split(b"\n") if ln.strip()][-1]
             last = last.split(b",", 1)[0].decode()
-        to_date = lambda s: datetime.strptime(s.strip(), "%d/%m/%Y").date()
+        to_date = lambda value: datetime.strptime(value.strip(), "%d/%m/%Y").date()
         return to_date(first), to_date(last)
     except (OSError, ValueError, IndexError):
         return None, None
 
 
-def add_arguments(ap: argparse.ArgumentParser) -> None:
+def add_arguments(ap: argparse.ArgumentParser, *, meta=None, data_path=None) -> None:
     """Add --costs plus one optional flag per cost knob."""
-    meta = schema()
+    meta = meta or schema()
     names = [p["name"] for p in meta["presets"]]
     ap.add_argument(
         "--costs",
@@ -114,7 +109,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
         metavar="F",
         help=f"starting account balance (default {meta['initial_balance']:g})",
     )
-    d0, d1 = data_bounds()
+    d0, d1 = data_bounds(data_path)
     bounds = (
         f"data covers {d0.isoformat()} \u2192 {d1.isoformat()}"
         if d0 and d1
@@ -171,6 +166,24 @@ class CostConfig:
         return self.preset
 
 
+def option_leg_breakup(side, exec_price, lots, lot_size, fee_per_order, rates):
+    turnover = max(0.0, exec_price * lots * lot_size)
+    brokerage = max(0.0, fee_per_order)
+    txn = max(0.0, rates["nse_options_txn_bps"] * 1e-4 * turnover)
+    sebi = max(0.0, rates["sebi_bps"] * 1e-4 * turnover)
+    stt = max(0.0, rates["stt_options_bps"] * 1e-4 * turnover) if side < 0 else 0.0
+    stamp = max(0.0, rates["stamp_options_bps"] * 1e-4 * turnover) if side > 0 else 0.0
+    gst = max(0.0, rates["gst"] * (brokerage + txn + sebi))
+    return {
+        "brokerage": brokerage,
+        "txn": txn,
+        "sebi": sebi,
+        "stt": stt,
+        "stamp": stamp,
+        "gst": gst,
+    }
+
+
 def _g(x: float) -> str:
     return f"{x:.10g}"
 
@@ -210,7 +223,7 @@ def _parse_date(raw: str) -> date:
         sys.exit(f"bad date {raw!r} (want YYYY-MM-DD)")
 
 
-def _resolve_dates(args) -> tuple[str | None, str | None]:
+def _resolve_dates(args, data_path=None) -> tuple[str | None, str | None]:
     """Explicit --from/--till flags as ISO strings (None = open side).
 
     Out-of-range dates only warn: the binary clamps to the data on its own,
@@ -220,7 +233,7 @@ def _resolve_dates(args) -> tuple[str | None, str | None]:
     till_d = _parse_date(args.till_date) if args.till_date else None
     if from_d and till_d and from_d > till_d:
         sys.exit(f"--from {from_d} is after --till {till_d}")
-    d0, d1 = data_bounds()
+    d0, d1 = data_bounds(data_path)
     for flag, d in (("--from", from_d), ("--till", till_d)):
         if d is None:
             continue
@@ -247,9 +260,9 @@ def _ask_date(prompt: str, default: date) -> date:
             print("  enter a date as YYYY-MM-DD", file=sys.stderr)
 
 
-def _ask_period() -> tuple[str | None, str | None]:
+def _ask_period(data_path=None) -> tuple[str | None, str | None]:
     """Wizard prompt for the backtest window, bounded by the data itself."""
-    d0, d1 = data_bounds()
+    d0, d1 = data_bounds(data_path)
     if d0 is None or d1 is None:
         return None, None
     span = f"{d0.isoformat()} \u2192 {d1.isoformat()}"
@@ -341,17 +354,11 @@ def resolve(
     *,
     prompt: bool | None = None,
     ask_period: bool = True,
+    meta=None,
+    data_path=None,
 ) -> CostConfig:
-    """Turn parsed args into a CostConfig, prompting only when allowed.
-
-    - an explicit --costs or any cost knob flag skips the wizard
-    - otherwise prompt on a TTY (costs, then the backtest period)
-    - otherwise use the binary defaults
-    - explicit --from/--till are validated and never prompted for
-    - ask_period=False leaves the period to the caller (scripts/synthetic.py
-      resolves it with bounds that account for the options-data coverage)
-    """
-    meta = schema()
+    """Turn parsed args into a CostConfig, prompting only when allowed."""
+    meta = meta or schema()
     if prompt is None:
         prompt = sys.stdin.isatty()
 
@@ -370,13 +377,13 @@ def resolve(
 
     def dates() -> tuple[str | None, str | None]:
         if not ask_period:
-            return _resolve_dates(args)
+            return _resolve_dates(args, data_path)
         if args.from_date is not None or args.till_date is not None:
-            return _resolve_dates(args)
-        return _ask_period() if prompt else (None, None)
+            return _resolve_dates(args, data_path)
+        return _ask_period(data_path) if prompt else (None, None)
 
     if args.costs is not None or explicit_knobs or not prompt:
-        from_date, till_date = _resolve_dates(args)
+        from_date, till_date = _resolve_dates(args, data_path)
         cfg = _build(
             args, meta, preset, values_from(meta["defaults"], preset),
             from_date, till_date,

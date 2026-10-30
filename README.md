@@ -30,13 +30,23 @@ dune runtest
 
 ## Python
 
-Analysis scripts run with `uv` from `research/analysis/`:
+The main analysis workflows run with `uv` from `research/analysis/`:
 
 ```sh
 cd research/analysis
-uv run python plot_pnl.py
-uv run python tearsheet.py
-uv run python viz.py
+uv run python tearsheet.py [STRATEGY]
+uv run python synthetic_tearsheet.py [STRATEGY]
+uv run python synthetic_tearsheet_options.py [STRATEGY]
+uv run python viz.py [--strategy STRATEGY]
+```
+
+The tearsheets accept cost, date-window, HTML-export, and trade-CSV flags;
+`viz.py` also accepts a saved backtest stream via `--csv PATH`. Run the Python
+regression tests with:
+
+```sh
+cd research/analysis
+uv run python -m unittest discover -s tests -v
 ```
 
 Dhan ingestion:

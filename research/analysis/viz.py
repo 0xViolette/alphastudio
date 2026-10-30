@@ -1,62 +1,42 @@
 """Candlestick chart of a strategy backtest (TradingView-style).
 
-Renders the backtest's price series as an interactive candlestick chart with
-trade markers and the strategy's probe overlays. HTML goes through the fast
-canvas renderer (scripts/lwc.py, TradingView Lightweight Charts); plotly
-(WebGL) is only used when --png asks for a static image.
+HTML uses Lightweight Charts for responsive interactive rendering; Plotly
+(WebGL) is used only for the optional static PNG.
 
-Usage (from the strategy/ project root):
-    python3 scripts/viz.py                          # run the backtest, render candles
-    python3 scripts/viz.py --csv out.csv            # render a saved CSV stream
-    python3 scripts/viz.py --from 2024-01-01 --till 2024-12-31
+Usage from research/analysis:
+    uv run python viz.py --strategy chandelier
+    uv run python viz.py --csv saved-stream.csv
+    uv run python viz.py --from 2024-01-01 --till 2024-12-31
 
---from/--till (YYYY-MM-DD, IST; --till inclusive) restrict the backtest to a
-date window; the interactive cost wizard names the range the data covers.
-They do not apply to --csv (a saved stream is a finished backtest).
-
-Data source: by default the emitter | dune exec pipeline of
-scripts/plot_pnl.py is run; --csv PATH loads a saved CSV stream instead
-(out.csv, scratch/out.csv, ...). The chart is written as self-contained HTML
-(dark theme with an in-chart Dark/Light toggle); --png additionally writes a
-static PNG via kaleido. --style light renders the PNG/light default.
-
---synthetic MODE (off|base|adverse|zero|all) additionally replays the same
-signals through the downloaded ATM option pairs (scripts/synthetic.py) and
-overlays magenta synthetic equity, dotted ATM-pair win/loss connectors and a
-headline net/cagr in the footer; --csv streams cannot be replayed, so the two
-flags are mutually exclusive. The TTY wizard asks for the mode, the adverse
-spread multiplier and the margin estimate unless the --synthetic-* flags fix
-them; non-TTY runs default to off. The option-store assumptions are printed
-before the chart and repeated in scripts/tearsheet.py's report.
+--from/--till (YYYY-MM-DD, IST; --till inclusive) restrict a fresh backtest.
+They do not apply to --csv, which is already a finished backtest. HTML is
+self-contained and defaults to a dark theme; --png also writes a static image.
 """
 
 import argparse
-import csv
-import io
 import math
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import plotly.graph_objects as go
 
 import costs as cost_cli
-import plot_pnl
-from plot_pnl import (
+from engine import (
     DEFAULT_STRATEGY,
     SIDE_BY_TAG,
     STRATEGIES,
-    is_zero,
-    resolve_strategy,
+    parse_stream,
     run_backtest,
-    sgn,
 )
+from cli import resolve_strategy
+from ledger import replay
+from performance import analyze
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Order specs are read from the strategy sources instead of being hardcoded
-# per tag: every enter_*/exit_* declaration in bin/*.ml defines an order's
+# per tag: every enter_*/exit_* declaration in research/strategies/*.ml defines an order's
 # action, long/short side and fill direction, and any (Stop <probe>) argument
 # names the probe that carries the order's trigger level.
 ORDER_SRC = re.compile(
@@ -94,15 +74,15 @@ ORDER_SPECS = _parse_order_specs()
 
 
 def fill_side(tag):
-    """+1 for a buy fill, -1 for a sell fill, from bin/*.ml (then fallback)."""
+    """+1 for a buy fill, -1 for a sell fill, from the strategy declarations."""
     spec = ORDER_SPECS.get(tag)
     if spec is not None:
         return spec["fill_side"]
     if tag in SIDE_BY_TAG:
         return SIDE_BY_TAG[tag]
     sys.exit(f"unknown order tag {tag!r}; declare it with enter_long/"
-             f"enter_short/exit_long/exit_short in bin/*.ml or add it to "
-             f"SIDE_BY_TAG in scripts/plot_pnl.py")
+             f"enter_short/exit_long/exit_short in research/strategies/*.ml "
+             f"or add it to SIDE_BY_TAG in engine.py")
 
 # ---------------------------------------------------------------- themes
 # TradingView palettes; gray #787b86 annotations stay readable on both.
@@ -262,105 +242,8 @@ def add_preset_buttons(fig, theme):
 # ---------------------------------------------------------------- data layer
 
 
-def parse_stream(text):
-    """Backtest CSV stream -> (dates, ohlc, probes, per-bar fills with tags)."""
-    lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
-    rows = list(csv.reader(io.StringIO("\n".join(lines))))
-    if not rows:
-        sys.exit("empty data stream")
-    header = None
-    for r in rows:
-        if r and "Date" in r and "event" in r:
-            header = r
-            rows = rows[rows.index(r):]
-            break
-    if header is None:
-        sys.exit("empty data stream")
-    i_dt, i_tm = header.index("Date"), header.index("Time")
-    i_o, i_h, i_l, i_c = (header.index(c) for c in ("Open", "High", "Low", "Close"))
-    i_evt = header.index("event")
-    i_px, i_qt = header.index("fill_price"), header.index("fill_qty")
-    i_ct = header.index("fill_cost") if "fill_cost" in header else None
-    probe_names = header[i_c + 1:i_evt]
-
-    dates, opens, highs, lows, closes = [], [], [], [], []
-    probes = {n: [] for n in probe_names}
-    bar_fills = []  # per bar: [(side, price, qty, tag, fee), ...]
-    nan = float("nan")
-    for row in rows[1:]:
-        if not row:
-            continue
-        dates.append(datetime.strptime(row[i_dt] + " " + row[i_tm],
-                                       "%m/%d/%y %I:%M %p"))
-        opens.append(float(row[i_o]))
-        highs.append(float(row[i_h]))
-        lows.append(float(row[i_l]))
-        closes.append(float(row[i_c]))
-        for j, name in enumerate(probe_names):
-            cell = row[i_c + 1 + j]
-            probes[name].append(float(cell) if cell else nan)
-        fills = []
-        events = [e.strip() for e in row[i_evt].split("|")
-                  if e.strip().endswith("filled")]
-        if events:
-            prices, qtys = row[i_px].split("|"), row[i_qt].split("|")
-            costs = row[i_ct].split("|") if i_ct is not None else ["0"] * len(events)
-            for event, price, qty, cost in zip(events, prices, qtys, costs):
-                tag = event[: -len("filled")].strip()
-                fills.append((fill_side(tag), float(price), float(qty), tag,
-                              float(cost or 0)))
-        bar_fills.append(fills)
-    return dates, opens, highs, lows, closes, probes, bar_fills
 
 
-is_zero = plot_pnl.is_zero
-sgn = plot_pnl.sgn
-
-
-def ledger(dates, closes, bar_fills, lot_size, initial):
-    """FIFO lot ledger over the bars.
-
-    Returns (equity, net_lots, realized, trades): equity is mark-to-market,
-    trades are rich round trips with entry/exit bar index, datetime, price,
-    direction, size and pnl — everything the chart needs for markers and
-    connectors.
-    """
-    realized, lots = 0.0, []
-    equity, net, realized_series, trades = [], [], [], []
-    for i, (dt, close, fills) in enumerate(zip(dates, closes, bar_fills)):
-        for side, price, qty, tag, fee in fills:
-            realized -= fee
-            this_fpl = fee / qty if qty else 0.0
-            remaining = side * qty
-            while lots and not is_zero(remaining) \
-                    and sgn(lots[0][1]) == -sgn(remaining):
-                entry_price, lot_qty, entry_i, entry_fpl = lots[0]
-                lots = lots[1:]
-                direction = float(sgn(lot_qty))
-                closed = min(abs(lot_qty), abs(remaining))
-                pnl = direction * closed * lot_size * (price - entry_price)
-                realized += pnl
-                trades.append({
-                    "dir": "long" if direction > 0 else "short",
-                    "lots": closed,
-                    "pnl": pnl - closed * (entry_fpl + this_fpl),
-                    "entry_i": entry_i, "entry_dt": dates[entry_i],
-                    "entry_px": entry_price,
-                    "exit_i": i, "exit_dt": dt, "exit_px": price,
-                    "exit_tag": tag,
-                })
-                left = lot_qty - direction * closed
-                if not is_zero(left):
-                    lots = [(entry_price, left, entry_i, entry_fpl)] + lots
-                remaining += direction * closed
-            if not is_zero(remaining):
-                lots.append((price, remaining, i, this_fpl))
-        unrealized = sum(sgn(q) * abs(q) * lot_size * (close - p)
-                         for p, q, _, _ in lots)
-        equity.append(initial + realized + unrealized)
-        realized_series.append(realized)
-        net.append(sum(q for _, q, _, _ in lots))
-    return equity, net, realized_series, trades
 
 
 def load_data(args, cfg):
@@ -373,17 +256,42 @@ def load_data(args, cfg):
         data_name = "backtest"
         if "filled" not in text:
             sys.exit(f"no fills found in strategy output; stderr was:\n{err}")
+    try:
+        stream = parse_stream(text, side_for=fill_side)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    bars = stream.bars
+    if not bars:
+        sys.exit("empty data stream")
+
     initial = cfg.initial_balance
     lot_size = cfg.lot_size
-    dates, o, h, l, c, probes, bar_fills = parse_stream(text)
-    equity, net, realized, trades = ledger(dates, c, bar_fills, lot_size, initial)
-    if not trades:
+    account = replay(bars, lot_size, initial)
+    if not account.trades:
         print("warning: no round-trip trades found in the data",
               file=sys.stderr)
+    nan = float("nan")
+    probes = {
+        name: [bar.probes.get(name, nan) for bar in bars]
+        for name in stream.probe_names
+    }
     return {
-        "dates": dates, "open": o, "high": h, "low": l, "close": c,
-        "probes": probes, "bar_fills": bar_fills,
-        "equity": equity, "net": net, "realized": realized, "trades": trades,
+        "dates": [bar.dt for bar in bars],
+        "open": [bar.open for bar in bars],
+        "high": [bar.high for bar in bars],
+        "low": [bar.low for bar in bars],
+        "close": [bar.close for bar in bars],
+        "probes": probes,
+        "bar_fills": [
+            [(f.side, f.price, f.qty, f.tag, f.fee) for f in bar.fills]
+            for bar in bars
+        ],
+        "bars": bars,
+        "account": account,
+        "equity": account.equity,
+        "net": account.net_lots,
+        "realized": account.realized_pnl,
+        "trades": account.trades,
         "initial": initial, "lot_size": lot_size, "costs": cfg.label(),
         "strategy": args.strategy, "data": data_name, "args": args,
     }
@@ -455,7 +363,7 @@ def add_hover_helper(fig, xs, ohlc, datestr, row=None, col=None):
 
 
 # what each order tag does (for the fill hover); fill side comes from
-# plot_pnl.SIDE_BY_TAG
+# engine.SIDE_BY_TAG
 TAG_ACTION = {
     "LE": "Enter long", "SE": "Enter short",
     "2NL": "Exit long · 2N stop", "TRL": "Exit long · chandelier",
@@ -473,7 +381,7 @@ def stop_level(ctx, tag, i):
     """The trigger level of the order that produced this fill.
 
     The level comes from the probe named in the order's (Stop <probe>)
-    argument in bin/*.ml, so this works for any strategy. Timing
+    argument in research/strategies/*.ml, so this works for any strategy. Timing
     (lib/backtest.ml): the strategy evaluates on bar t's close and its orders
     rest into bar t+1, whose range they fill against — so the order behind a
     fill on bar i was placed at the close of bar i-1 with the level it had
@@ -558,10 +466,10 @@ def add_trade_markers(fig, ctx, xs, row=None, col=None, connectors=True):
         for won in (True, False):
             cx, cy = [], []
             for t in ctx["trades"]:
-                if (t["pnl"] > 0) != won:
+                if (t.pnl > 0) != won:
                     continue
-                cx += [xs[t["entry_i"]], xs[t["exit_i"]], None]
-                cy += [t["entry_px"], t["exit_px"], None]
+                cx += [xs[t.entry_i], xs[t.exit_i], None]
+                cy += [t.entry_price, t.exit_price, None]
             fig.add_trace(go.Scattergl(
                 x=cx, y=cy, mode="lines", hoverinfo="skip",
                 name="Winning trades" if won else "Losing trades",
@@ -589,29 +497,21 @@ def probe_overlays(fig, ctx, xs, row=None, col=None):
 
 
 def stats_footer(ctx):
-    """One-line watermark: CAGR / Sharpe / maxDD on the mark-to-market curve."""
-    eq, dates, initial = ctx["equity"], ctx["dates"], ctx["initial"]
-    day_eq = {}
-    for d, e in zip(dates, eq):
-        day_eq[d.date()] = e
-    days = sorted(day_eq)
-    if len(days) < 2:
+    """One-line watermark using the tearsheet's performance definitions."""
+    if len({dt.date() for dt in ctx["dates"]}) < 2:
         return ""
-    vals = [day_eq[d] for d in days]
-    rets = [vals[i] / vals[i - 1] - 1 for i in range(1, len(vals))]
-    years = (days[-1] - days[0]).days / 365.25 or 1e-9
-    ppy = len(days) / years
-    mean = sum(rets) / len(rets)
-    sd = math.sqrt(sum((r - mean) ** 2 for r in rets) / max(1, len(rets) - 1))
-    sharpe = mean / sd * math.sqrt(ppy) if sd else float("nan")
-    cagr = (vals[-1] / initial) ** (1 / years) - 1
-    peak, maxdd = vals[0], 0.0
-    for v in vals:
-        peak = max(peak, v)
-        maxdd = min(maxdd, v / peak - 1)
-    line = (f"CAGR {cagr:+.1%}   Sharpe {sharpe:.2f}   "
-            f"max DD {maxdd:.1%}   trades {len(ctx['trades'])}")
-    return line
+    result = analyze(
+        ctx["bars"],
+        account=ctx["account"],
+        lot_size=ctx["lot_size"],
+        initial=ctx["initial"],
+        strategy=ctx["strategy"],
+        data=ctx["data"],
+        cost_model=ctx["costs"],
+    )
+    kw = result.metrics
+    return (f"CAGR {kw['cagr']:+.1%}   Sharpe {kw['sharpe']:.2f}   "
+            f"max DD {kw['maxdd_pct']:.1%}   trades {len(ctx['trades'])}")
 
 
 def base_title(ctx, what):
@@ -645,8 +545,7 @@ def make_candles(ctx, theme):
 def render(ctx, theme, out_base, want_png):
     label = "Candlesticks + trade markers"
     html = out_base.with_suffix(".html")
-    # candles gets the fast canvas renderer (scripts/lwc.py, TradingView
-    # Lightweight Charts); plotly is only used for the optional PNG
+    # lwc.py renders interactive HTML; plotly is only used for the optional PNG
     import lwc
 
     lwc.render_candles(ctx, theme, html)
@@ -674,7 +573,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--strategy", choices=list(STRATEGIES), default=None,
-                    help=f"which bin/ strategy to run "
+                    help=f"which strategy to run "
                          f"(default: {DEFAULT_STRATEGY}; prompts on a TTY "
                          "when omitted)")
     ap.add_argument("--csv", type=Path,

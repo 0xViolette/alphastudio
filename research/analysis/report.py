@@ -1,14 +1,30 @@
-"""Report building and printing for tearsheets."""
+"""View-neutral report content for performance tearsheets."""
 
 from math import isfinite
 
-from terminal import (
-    W, _COLOR, tone, dim, bold, rule, kv, banner,
-    polarity, signed_text, row, chunks_row, kv_row,
-)
-
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def polarity(value):
+    try:
+        if value > 0:
+            return 1
+        if value < 0:
+            return -1
+    except TypeError:
+        pass
+    return None
+
+
+def row(label, value, note="", sign=None, sub=False, dim_value=False):
+    return {"label": label, "chunks": [(value, sign)], "note": note,
+            "sub": sub, "dim": dim_value}
+
+
+def chunks_row(label, chunks, note="", sub=False):
+    return {"label": label, "chunks": chunks, "note": note,
+            "sub": sub, "dim": False}
 
 
 def build_report(kw):
@@ -219,51 +235,4 @@ def build_report(kw):
         "annual_points": kw.get("annual_points", {}),
         "footer": footer,
     }
-
-def print_report(c):
-    print()
-    banner(c["title"], c["subtitle"])
-    print()
-    for r in c["overview"]:
-        kv_row(r)
-    for title, rows in c["sections"]:
-        rule(title)
-        for r in rows:
-            kv_row(r)
-
-    print()
-    rule("MONTHLY RETURNS (%)")
-    grid, annual = c["monthly"], c["annual"]
-    head = "  " + f"{'year':<6}" + "".join(f"{m:>7}" for m in MONTHS)
-    print(dim(head + f"{'year':>9}"))
-    for y in sorted(annual):
-        cells = [
-            f"{'':>7}" if (y, m) not in grid
-            else tone(grid[(y, m)] * 100, "{:+7.2f}")
-            for m in range(1, 13)
-        ]
-        print(f"  {dim(f'{y:<6}')}" + "".join(cells) + tone(annual[y] * 100, "{:+9.2f}"))
-
-    grid_p, annual_p = c.get("monthly_points", {}), c.get("annual_points", {})
-    if grid_p or annual_p:
-        print()
-        rule("MONTHLY RETURNS (POINTS)")
-        head = "  " + f"{'year':<6}" + "".join(f"{m:>11}" for m in MONTHS)
-        print(dim(head + f"{'year':>12}"))
-        for y in sorted(annual_p):
-            cells = [
-                f"{'':>11}" if (y, m) not in grid_p
-                else tone(grid_p[(y, m)], "{:+11.2f}")
-                for m in range(1, 13)
-            ]
-            print(f"  {dim(f'{y:<6}')}" + "".join(cells) + tone(annual_p[y], "{:+12.2f}"))
-
-    if c["bench"]:
-        rule("VERSUS BUY & HOLD")
-        for r in c["bench"]:
-            kv_row(r)
-
-    print()
-    print(dim(c["footer"]))
-    print()
 

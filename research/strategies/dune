@@ -1,20 +1,24 @@
 (executable
  (name chandelier)
  (public_name chandelier)
- (libraries rheo rheo-backtest unix))
+ (libraries rheo rheo-backtest rheo-ta unix))
 
 (executable
  (name chandelier_35)
  (public_name chandelier_35)
- (libraries rheo rheo-backtest unix))
+ (libraries rheo rheo-backtest rheo-ta unix))
 
+(executable
+ (name chandelier_35_fix)
+ (public_name chandelier_35_fix)
+ (libraries rheo rheo-backtest rheo-ta unix))
 
 (executable
  (name baseline)
  (public_name baseline)
- (libraries rheo rheo-backtest unix))
+ (libraries rheo rheo-backtest rheo-ta unix))
 
 (executable
  (name baseline_35)
  (public_name baseline_35)
- (libraries rheo rheo-backtest unix))
+ (libraries rheo rheo-backtest rheo-ta unix))

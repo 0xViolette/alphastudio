@@ -1,6 +1,6 @@
 open Rheo
 
-(* Volatility-shock entry + ATR trailing stop, under the recurrence
+(* Volatility-shock entry + fixed-distance trailing stop, under the recurrence
    semantics: [recurrence body] starts its knot as [Pending] and runs
    [body] from the first bar, feeding each result back on the next bar.
    There is no warmup bookkeeping — a body that needs a seed selects it
@@ -9,8 +9,8 @@ open Rheo
    Strategy:
    - ENTRY: close jumps >5% over the previous close (unknown bar).
    - FILL:  latch the close of the shock bar.
-   - STOP:  once in, trail max(prev_stop, close - 2*ATR(6)); exit when
-     close falls through the stop.
+   - STOP:  once in, trail max(prev_stop, close - 5); exit when close
+     falls through the stop.
 
    Act A (the mistake): an unbootstrapped stop loop. The knot starts
    [Pending] and [max prev trail] never escapes it — [Pending] in,
@@ -19,11 +19,10 @@ open Rheo
    without touching [prev] — bodies that use prev strictly have no such
    rescue.)
 
-   Act B (the fix): event-driven and history-dependent seeds belong in
-   the BODY, selected while the knot is pending (Pine's nz). [cond] gates
-   the strategy on the entry event. No fixed bar arithmetic anywhere —
-   the strategy starts whenever the event fires and the ATR happens to be
-   ready. *)
+   Act B (the fix): event-driven seeds belong in the BODY, selected while
+   the knot is pending. [value_when] latches the entry tick, and [cond]
+   gates the strategy on that entry. The strategy starts whenever the event
+   fires. *)
 
 let pp_float = function
   | None -> "None"
@@ -47,24 +46,22 @@ let build m ~fixed =
   let open M.Ops in
   let close = input () in
   let shock = close > pre close * !1.05 in
-  let tr = abs (close - pre close) in
-  let atr6 =
-    recurrence (fun p ->
-      cond (is_pending p) (Indicator.sma 6 tr) ((tr * !(1. /. 6.)) + (p * !(5. /. 6.))))
-  in
-  let trail = close - (atr6 * !2.) in
+  let trail = close - !5. in
   if fixed
   then (
     (* latch the fill price: on the shock bar take close, else keep prev *)
     let fill = recurrence (fun prev -> cond shock close prev) in
     (* entered = Some true from the first shock on *)
-    let entered = Indicator.bars_since shock >= !0. in
+    let entered = value_when shock tick >= !0. in
     (* trail the stop once in; [cond (is_pending prev) trail prev]
        bootstraps the ratchet from the trail itself until the stop has a
        value *)
     let stop =
       recurrence (fun prev ->
-        cond entered (Indicator.max (cond (is_pending prev) trail prev) trail) prev)
+        cond
+          entered
+          (max (cond (is_pending prev) trail prev) trail)
+          prev)
     in
     let exit = close < stop in
     let module R = (val compile ()) in
@@ -75,7 +72,7 @@ let build m ~fixed =
     (* the unbootstrapped stop: the knot's initial [Pending] flows through
        [max] and back into the knot — the stop never comes to life *)
     let fill = recurrence (fun prev -> cond shock close prev) in
-    let stop = recurrence (fun prev -> Indicator.max prev trail) in
+    let stop = recurrence (fun prev -> max prev trail) in
     let exit = close < stop in
     let module R = (val compile ()) in
     fun c ->
@@ -100,13 +97,13 @@ let run name closes expected_stop ~fixed =
   Array.iteri
     (fun i c ->
        let shock, fill, stop, exit = step c in
-        let note =
-          if value_option shock = Some true
-          then "ENTRY shock"
-          else if value_option exit = Some true
-          then "STOP HIT -> exit"
-          else ""
-        in
+       let note =
+         if value_option shock = Some true
+         then "ENTRY shock"
+         else if value_option exit = Some true
+         then "STOP HIT -> exit"
+         else ""
+       in
        let ok =
          match value_option stop, expected_stop.(i) with
          | None, None -> true
@@ -130,9 +127,22 @@ let run name closes expected_stop ~fixed =
   else Printf.printf "  %d MISMATCH(ES)\n\n" !mismatches
 ;;
 
-(* Early shock: entry on bar 2, four bars before the ATR exists. *)
 let early =
-  [| 100.; 101.; 107.; 108.; 110.; 112.; 115.; 117.; 116.; 114.; 111.; 108.; 105.; 104. |]
+  [| 100.
+   ; 101.
+   ; 107.
+   ; 108.
+   ; 110.
+   ; 112.
+   ; 115.
+   ; 117.
+   ; 116.
+   ; 114.
+   ; 111.
+   ; 108.
+   ; 105.
+   ; 104.
+  |]
 ;;
 
 (* Act A — the knot's initial Pending circulates through [max] forever:
@@ -145,32 +155,31 @@ let () =
     ~fixed:false
 ;;
 
-(* Act B — body-side seeding: the stop stays None until the ATR exists
-   (honest: no stop before that), then trails and catches the decline. *)
+(* Act B — body-side seeding: the stop starts on the entry bar, then trails
+   and catches the decline. *)
 let () =
   run
     "Act B: stop seeded in the body via cond/is_pending — early shock"
     early
     [| None
      ; None
-     ; None
-     ; None
-     ; None
-     ; None
-     ; Some 110. (* first bar the ATR exists: 115 - 2*2.5 *)
-     ; Some 112.1667 (* ratchet: 117 - 2*2.4167 *)
-     ; Some 112.1667
-     ; Some 112.1667
-     ; Some 112.1667 (* close 111 < stop: STOP HIT *)
-     ; Some 112.1667
-     ; Some 112.1667
-     ; Some 112.1667
+     ; Some 102.
+     ; Some 103.
+     ; Some 105.
+     ; Some 107.
+     ; Some 110.
+     ; Some 112.
+     ; Some 112.
+     ; Some 112.
+     ; Some 112. (* close 111 < stop: STOP HIT *)
+     ; Some 112.
+     ; Some 112.
+     ; Some 112.
     |]
     ~fixed:true
 ;;
 
-(* Act B on late-shock data: same code, entry on bar 9; the ATR is long
-   since ready, so the stop starts on the entry bar itself. *)
+(* Act B on late-shock data: same code, entry on bar 9. *)
 let () =
   run
     "Act B: same code, late shock (bar 9)"
@@ -198,11 +207,11 @@ let () =
      ; None
      ; None
      ; None
-     ; Some 108. (* 112 - 2*2 *)
-     ; Some 109.3333
-     ; Some 111.2778
-     ; Some 113.8981
-     ; Some 113.8981
+     ; Some 107.
+     ; Some 108.
+     ; Some 110.
+     ; Some 113.
+     ; Some 113.
     |]
     ~fixed:true
 ;;

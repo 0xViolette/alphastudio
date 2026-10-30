@@ -1,3 +1,7 @@
 (test
  (name test_costs)
  (libraries rheo-backtest))
+
+(test
+ (name test_env)
+ (libraries rheo rheo-backtest))
