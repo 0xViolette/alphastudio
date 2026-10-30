@@ -1,6 +1,6 @@
 let cfg = RheoBacktest.Costs_cli.parse Sys.argv
 
-module Papa =
+module S =
   RheoBacktest.Backtest.Make
     (struct
       let lot_size = cfg.lot_size
@@ -9,11 +9,11 @@ module Papa =
     end)
     ()
 
-module Ta = RheoTa.Ta.Make (Papa.D) (Papa.Env)
+module Ta = RheoTa.Ta.Make (S.D) (S.Env)
 
 let strat () =
-  let open Papa in
-  let open Papa.Ops in
+  let open S in
+  let open S.Ops in
   let echannel = 10 in
   let risk = 0.0035 in
   let leverage = 2.0 in
@@ -107,7 +107,7 @@ let () =
   let t0 = Sys.time () in
   let orders, probes = strat () in
   Printf.printf "%s\n" (RheoBacktest.Report.csv_header (List.map fst probes));
-  Papa.backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts ~probes
+  S.backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts ~probes
     ~on_bar:(fun r -> Printf.printf "%s\n" (RheoBacktest.Report.csv_row r))
     orders;
   Printf.eprintf "Execution time: %.4f seconds\n" (Sys.time () -. t0)
