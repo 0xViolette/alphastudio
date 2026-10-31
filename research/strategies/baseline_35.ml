@@ -9,7 +9,7 @@ module Papa =
     end)
     ()
 
-module Ta = RheoTa.Ta.Make (Papa.D) (Papa.Env)
+module Ta = RheoTa.Make (Papa.D) (Papa.Env)
 
 let strat () =
   let open Papa in

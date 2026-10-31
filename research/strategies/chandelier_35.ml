@@ -9,7 +9,7 @@ module S =
     end)
     ()
 
-module Ta = RheoTa.Ta.Make (S.D) (S.Env)
+module Ta = RheoTa.Make (S.D) (S.Env)
 
 let strat () =
   let open S in
@@ -56,7 +56,7 @@ let strat () =
   let enter_short = enter_short "SE" tradecon (Stop se) bearish in
   let trail_mult = 2.0 in
   let trail_n = 22 in
-  let chand_l = Ta.highest trail_n (high - (!trail_mult * atr)) in
+  let chand_l = Ta.highest trail_n high + (!trail_mult * atr) in
   let chand_s = Ta.lowest trail_n low + (!trail_mult * atr) in
   (* 1 *)
   let trail_l =
