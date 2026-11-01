@@ -9,8 +9,6 @@ module Papa =
     end)
     ()
 
-module Ta = RheoTa.Make (Papa.D) (Papa.Env)
-
 let strat () =
   let open Papa in
   let open Papa.Ops in
@@ -68,10 +66,5 @@ let strat () =
   (orders, probes)
 
 let () =
-  let t0 = Sys.time () in
   let orders, probes = strat () in
-  Printf.printf "%s\n" (RheoBacktest.Report.csv_header (List.map fst probes));
-  Papa.backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts ~probes
-    ~on_bar:(fun r -> Printf.printf "%s\n" (RheoBacktest.Report.csv_row r))
-    orders;
-  Printf.eprintf "Execution time: %.4f seconds\n" (Sys.time () -. t0)
+  Papa.run_csv_cli cfg ~probes orders

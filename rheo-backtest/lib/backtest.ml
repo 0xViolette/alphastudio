@@ -21,6 +21,7 @@ struct
       end)
 
   include Env
+  module Ta = RheoTa.Make (D) (Env)
 
   let kind_signal = function
     | Order.Market -> pure Order.Market
@@ -88,4 +89,12 @@ struct
           loop next_resting rest
     in
     loop [] (Feed.stdin_bars ~from_ts ~till_ts ())
+
+  let run_csv_cli (cfg : Costs_cli.config) ?(probes = []) orders =
+    let t0 = Sys.time () in
+    Printf.printf "%s\n" (Report.csv_header (List.map fst probes));
+    backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts ~probes
+      ~on_bar:(fun r -> Printf.printf "%s\n" (Report.csv_row r))
+      orders;
+    Printf.eprintf "Execution time: %.4f seconds\n" (Sys.time () -. t0)
 end

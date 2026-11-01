@@ -1,4 +1,4 @@
 (library
  (name rheoBacktest)
  (public_name rheo-backtest)
- (libraries rheo unix))
+ (libraries rheo rheo-ta unix))
