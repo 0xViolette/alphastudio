@@ -45,26 +45,20 @@ let strat () =
   let lx2n = Position.entry_price - (!atrgunak * atr_at_entry) in
   let sx2n = Position.entry_price + (!atrgunak * atr_at_entry) in
   let bullish = close > mov and bearish = close < mov in
-  let stop_l = exit_long "2NL" (Stop lx2n) (Position.entry_price > se) in
-  let stop_s = exit_short "2NS" (Stop sx2n) (Position.entry_price < le) in
-  let cover_s = exit_short "LE cover" (Stop le) bullish in
-  let enter_long = enter_long "LE" tradecon (Stop le) bullish in
-  let cover_l = exit_long "SE cover" (Stop se) bearish in
-  let enter_short = enter_short "SE" tradecon (Stop se) bearish in
-  let orders = [ stop_l; stop_s; cover_s; enter_long; cover_l; enter_short ] in
-  let probes =
-    [
-      ("atr1", atr1);
-      ("atr", atr);
-      ("mov", mov);
-      ("tradecon", tradecon);
-      ("atr_at_entry", atr_at_entry);
-      ("lx2n", lx2n);
-      ("sx2n", sx2n);
-    ]
-  in
-  (orders, probes)
+  exit_long "2NL" (Stop lx2n) (Position.entry_price > se);
+  exit_short "2NS" (Stop sx2n) (Position.entry_price < le);
+  exit_short "LE cover" (Stop le) bullish;
+  enter_long "LE" tradecon (Stop le) bullish;
+  exit_long "SE cover" (Stop se) bearish;
+  enter_short "SE" tradecon (Stop se) bearish;
+  observe atr1 "atr1";
+  observe atr "atr";
+  observe mov "mov";
+  observe tradecon "tradecon";
+  observe atr_at_entry "atr_at_entry";
+  observe lx2n "lx2n";
+  observe sx2n "sx2n"
 
 let () =
-  let orders, probes = strat () in
-  Papa.run_csv_cli cfg ~probes orders
+  strat ();
+  Papa.run_csv_cli cfg

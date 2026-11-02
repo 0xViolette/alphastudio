@@ -23,6 +23,10 @@ struct
   include Env
   module Ta = RheoTa.Make (D) (Env)
 
+  let observations = ref []
+  let order_signals = ref []
+  let observe s name = observations := (s, name) :: !observations
+
   let kind_signal = function
     | Order.Market -> pure Order.Market
     | Limit p -> lift (fun p -> Order.Limit p) p
@@ -33,7 +37,8 @@ struct
       pure (fun target kind -> { Order.id; action = action target; kind })
     in
     let req = make_req <*> target <*> kind_signal kind in
-    cond when_ req (undefined ())
+    let order = cond when_ req (undefined ()) in
+    order_signals := order :: !order_signals
 
   let enter_long id = new_order id (fun t -> Order.Enter_long t)
   let enter_short id = new_order id (fun t -> Order.Enter_short t)
@@ -60,9 +65,9 @@ struct
     fills
 
   let backtest ?(from_ts = None) ?(till_ts = None)
-      ?(probes : (string * float signal) list = [])
-      ?(on_bar = fun (_ : Report.t) -> ()) (orders : Order.request signal list)
-      =
+      ?(on_bar = fun (_ : Report.t) -> ()) () =
+    let orders = List.rev !order_signals in
+    let observations = List.rev !observations in
     let module Engine = (val compile ()) in
     let rec loop (resting : Order.request list) bars =
       match bars () with
@@ -84,17 +89,19 @@ struct
               Report.bar;
               fills;
               placed = next_resting |> List.filter is_new;
-              probes = List.map (fun (name, s) -> (name, Engine.value s)) probes;
+              probes =
+                List.map (fun (s, name) -> (name, Engine.value s)) observations;
             };
           loop next_resting rest
     in
     loop [] (Feed.stdin_bars ~from_ts ~till_ts ())
 
-  let run_csv_cli (cfg : Costs_cli.config) ?(probes = []) orders =
+  let run_csv_cli (cfg : Costs_cli.config) =
+    let observations = List.rev !observations in
     let t0 = Sys.time () in
-    Printf.printf "%s\n" (Report.csv_header (List.map fst probes));
-    backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts ~probes
+    Printf.printf "%s\n" (Report.csv_header (List.map snd observations));
+    backtest ~from_ts:cfg.from_ts ~till_ts:cfg.till_ts
       ~on_bar:(fun r -> Printf.printf "%s\n" (Report.csv_row r))
-      orders;
+      ();
     Printf.eprintf "Execution time: %.4f seconds\n" (Sys.time () -. t0)
 end

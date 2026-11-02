@@ -2,6 +2,7 @@ module type S = sig
   open Ast
 
   type 'a signal
+  type any_signal
   type set = Set : 'a signal * 'a -> set
 
   val tick : float signal
@@ -52,19 +53,13 @@ module type S = sig
   val is_pending : 'a signal -> bool signal
   val map : (float -> float) -> float signal -> float signal
 
-  val map2
-    :  (float -> float -> float)
-    -> float signal
-    -> float signal
-    -> float signal
+  val map2 :
+    (float -> float -> float) -> float signal -> float signal -> float signal
 
   val gmap : ('a option -> 'b option) -> 'a signal -> 'b signal
 
-  val gmap2
-    :  ('a option -> 'b option -> 'c option)
-    -> 'a signal
-    -> 'b signal
-    -> 'c signal
+  val gmap2 :
+    ('a option -> 'b option -> 'c option) -> 'a signal -> 'b signal -> 'c signal
 
   val lift : ('a -> 'b) -> 'a signal -> 'b signal
   val lift2 : ('a -> 'b -> 'c) -> 'a signal -> 'b signal -> 'c signal

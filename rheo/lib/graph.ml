@@ -1,8 +1,4 @@
-type t =
-  { ctx : Registry.t
-  ; mutable compiled : bool
-  ; id : int
-  }
+type t = { ctx : Registry.t; mutable compiled : bool; id : int }
 
 let fresh_token =
   let c = ref 0 in
@@ -10,19 +6,15 @@ let fresh_token =
     let token = !c in
     incr c;
     token
-;;
 
 let create () =
   { ctx = Registry.create (); compiled = false; id = fresh_token () }
-;;
 
 open Ast
 
 let make g (def : 'a def) =
-  if not g.compiled
-  then Registry.make g.ctx g.id def
+  if not g.compiled then Registry.make g.ctx g.id def
   else failwith "Cannot mess with a compiled graph"
-;;
 
 let undefined g = make g Undefined Any
 let const g v = make g (Const v) Float
@@ -41,4 +33,3 @@ let recurrence g body =
   let knot = make g Knot Float in
   let result = body knot in
   make g (Rec (knot, result)) Float
-;;

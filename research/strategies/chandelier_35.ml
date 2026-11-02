@@ -46,61 +46,32 @@ let strat () =
   let lx2n = Position.entry_price - (!atrgunak * atr_at_entry) in
   let sx2n = Position.entry_price + (!atrgunak * atr_at_entry) in
   let bullish = close > mov and bearish = close < mov in
-  let stop_l = exit_long "2NL" (Stop lx2n) (Position.entry_price > se) in
-  let stop_s = exit_short "2NS" (Stop sx2n) (Position.entry_price < le) in
-  let cover_s = exit_short "LE cover" (Stop le) bullish in
-  let enter_long = enter_long "LE" tradecon (Stop le) bullish in
-  let cover_l = exit_long "SE cover" (Stop se) bearish in
-  let enter_short = enter_short "SE" tradecon (Stop se) bearish in
   let trail_mult = 2.0 in
   let trail_n = 22 in
   let chand_l = Ta.highest trail_n high + (!trail_mult * atr) in
   let chand_s = Ta.lowest trail_n low + (!trail_mult * atr) in
-  (* 1 *)
-  let trail_l =
-    exit_long "TRL" (Stop chand_l)
-      (chand_l > Position.entry_price && chand_l < close)
-  in
-  let trail_s =
-    exit_short "TRS" (Stop chand_s)
-      (chand_s < Position.entry_price && chand_s > close)
-  in
-  (* 2 *)
-  (* let trail_l = *)
-  (*   exit_long "TRL" Market (chand_l > Position.entry_price) *)
-  (* in *)
-  (* let trail_s = *)
-  (*   exit_short "TRS" Market (chand_s < Position.entry_price) *)
-  (* in *)
-  let orders =
-    [
-      stop_l;
-      trail_l;
-      stop_s;
-      trail_s;
-      cover_s;
-      enter_long;
-      cover_l;
-      enter_short;
-    ]
-  in
-  let probes =
-    [
-      ("atr1", atr1);
-      ("atr", atr);
-      ("mov", mov);
-      ("tradecon", tradecon);
-      ("atr_at_entry", atr_at_entry);
-      ("lx2n", lx2n);
-      ("sx2n", sx2n);
-      ("le", le);
-      ("se", se);
-      ("chand_l", chand_l);
-      ("chand_s", chand_s);
-    ]
-  in
-  (orders, probes)
+  exit_long "2NL" (Stop lx2n) (Position.entry_price > se);
+  exit_long "TRL" (Stop chand_l)
+    (chand_l > Position.entry_price && chand_l < close);
+  exit_short "2NS" (Stop sx2n) (Position.entry_price < le);
+  exit_short "TRS" (Stop chand_s)
+    (chand_s < Position.entry_price && chand_s > close);
+  exit_short "LE cover" (Stop le) bullish;
+  enter_long "LE" tradecon (Stop le) bullish;
+  exit_long "SE cover" (Stop se) bearish;
+  enter_short "SE" tradecon (Stop se) bearish;
+  observe atr1 "atr1";
+  observe atr "atr";
+  observe mov "mov";
+  observe tradecon "tradecon";
+  observe atr_at_entry "atr_at_entry";
+  observe lx2n "lx2n";
+  observe sx2n "sx2n";
+  observe le "le";
+  observe se "se";
+  observe chand_l "chand_l";
+  observe chand_s "chand_s"
 
 let () =
-  let orders, probes = strat () in
-  S.run_csv_cli cfg ~probes orders
+  strat ();
+  S.run_csv_cli cfg

@@ -50,7 +50,7 @@ let csv_row (r : t) =
         events r;
         pipe (fun (f : Order.fill) -> f.id);
         pipe (fun (f : Order.fill) ->
-          Printf.sprintf "%+d" (Order.sign_of_side f.side));
+            Printf.sprintf "%+d" (Order.sign_of_side f.side));
         pipe (fun (f : Order.fill) -> num f.price);
         pipe (fun (f : Order.fill) -> num f.lots);
         pipe (fun (f : Order.fill) -> num f.fees);

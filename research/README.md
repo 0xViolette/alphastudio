@@ -259,9 +259,10 @@ for a real strategy, feed bars from the backtest harness instead.
 - `Indicator` including `Ta`,
 - order constructors and `backtest`.
 
-Orders are signal-valued: they are evaluated after a bar closes and become
-live for the next bar. If their condition remains true they are recomputed and
-re-placed on each bar.
+Order constructors register signal-valued requests behind the scenes. The
+requests are evaluated after a bar closes and become live for the next bar. If
+their condition remains true they are recomputed and re-placed on each bar.
+`observe` similarly registers a signal for reporting under a column name.
 
 ```ocaml
 open Rheo
@@ -274,26 +275,25 @@ let () =
   let slow = Indicator.ema 65 close in
   let go_long = Indicator.crossover fast slow in
   let go_flat = Indicator.crossunder fast slow in
-  let orders =
-    [ enter_long "LE" !1.0 (Stop close) go_long
-    ; exit_long "LX" (Stop close) go_flat
-    ]
-  in
+  enter_long "LE" !1.0 (Stop close) go_long;
+  exit_long "LX" (Stop close) go_flat;
+  observe fast "fast";
+  observe slow "slow";
   Printf.printf "%s\n" (Report.csv_header [ "fast"; "slow" ]);
   backtest
-    ~probes:[ "fast", fast; "slow", slow ]
     ~on_bar:(fun r -> Printf.printf "%s\n" (Report.csv_row r))
-    orders
+    ()
 ;;
 ```
 
-Order constructors:
+Order constructors and observation registration:
 
 ```ocaml
-enter_long  : string -> float signal -> float signal kind -> bool signal -> request signal
-enter_short : string -> float signal -> float signal kind -> bool signal -> request signal
-exit_long   : string -> float signal kind -> bool signal -> request signal
-exit_short  : string -> float signal kind -> bool signal -> request signal
+enter_long  : string -> float signal -> float signal kind -> bool signal -> unit
+enter_short : string -> float signal -> float signal kind -> bool signal -> unit
+exit_long   : string -> float signal kind -> bool signal -> unit
+exit_short  : string -> float signal kind -> bool signal -> unit
+observe     : float signal -> string -> unit
 ```
 
 The numeric argument to `enter_*` is a target size in lots. `exit_*` flatten

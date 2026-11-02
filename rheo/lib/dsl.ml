@@ -5,6 +5,7 @@ module Make () : S = struct
 
   type set = Machine.set = Set : 'a signal * 'a -> set
   type 'a signal = 'a Ast.signal
+  type any_signal = Ast.any_signal
 
   (* -------------------------------------------------------------------------- *)
   (* Graph construction                                                         *)
