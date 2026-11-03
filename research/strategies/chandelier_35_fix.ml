@@ -18,8 +18,8 @@ let strat () =
   let atrgunak = 2. in
   let ma = 65 in
   let atrbars = 20 in
-  let le = Ta.highest echannel high + !0.05 in
-  let se = Ta.lowest echannel low - !0.05 in
+  let le = Ta.highest echannel close + !0.05 in
+  let se = Ta.lowest echannel close - !0.05 in
   let entered_trade = Position.entered_trade in
   let atr1 = Ta.sma atrbars Ta.tr in
   let atr = Ta.ema 20 atr1 in
@@ -46,10 +46,10 @@ let strat () =
   let lx2n = Position.entry_price - (!atrgunak * atr_at_entry) in
   let sx2n = Position.entry_price + (!atrgunak * atr_at_entry) in
   let bullish = close > mov and bearish = close < mov in
-  let trail_mult = 1.75 in
+  let trail_mult = 2.0 in
   let trail_n = 22 in
-  let chand_l = Ta.highest trail_n high - (!trail_mult * atr) in
-  let chand_s = Ta.lowest trail_n low + (!trail_mult * atr) in
+  let chand_l = Ta.highest trail_n close + (!trail_mult * atr) in
+  let chand_s = Ta.lowest trail_n close + (!trail_mult * atr) in
   exit_long "2NL" (Stop lx2n) (Position.entry_price > se);
   exit_long "TRL" (Stop chand_l)
     (chand_l > Position.entry_price && chand_l < close);
