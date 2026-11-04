@@ -1,21 +1,7 @@
-(* CLI surface for cost configuration. Parsing is deliberately kept in the
-   library so bin/main.ml, tests, and future executables share one contract.
-   There is no environment-variable or .env fallback: an explicit flag wins,
-   otherwise the built-in defaults are used. *)
-
-type config = {
-  costs : Costs.t;
-  params : Costs.params;
-  lot_size : float;
-  initial_balance : float;
-  from_ts : int64 option;
-  till_ts : int64 option (* exclusive: first midnight IST after the till date *);
-}
+(* Shared command-line parsing for strategies and configuration utilities.
+   Explicit flags win; there is no environment-variable or .env fallback. *)
 
 exception Error of string
-
-let default_lot_size = 65.
-let default_initial_balance = 3_000_000.
 
 (* days-from-civil (Howard Hinnant) and back, for strict YYYY-MM-DD parsing
    without a calendar dependency *)
@@ -60,84 +46,6 @@ let unix_of_date s =
       Int64.(sub (mul (of_int (days_from_civil y m d)) 86400L) 19800L)
   | _ -> bad ()
 
-let json_escape s =
-  let b = Buffer.create (String.length s + 8) in
-  String.iter
-    (fun c ->
-      match c with
-      | '"' -> Buffer.add_string b "\\\""
-      | '\\' -> Buffer.add_string b "\\\\"
-      | '\n' -> Buffer.add_string b "\\n"
-      | '\r' -> Buffer.add_string b "\\r"
-      | '\t' -> Buffer.add_string b "\\t"
-      | c when Char.code c < 0x20 ->
-          Buffer.add_string b (Printf.sprintf "\\u%04x" (Char.code c))
-      | c -> Buffer.add_char b c)
-    s;
-  Buffer.contents b
-
-let json_string s = "\"" ^ json_escape s ^ "\""
-let json_float x = Printf.sprintf "%.10g" x
-
-let schema_json () =
-  let p = Costs.default_params in
-  let preset_entries =
-    List.map
-      (fun (preset, desc) ->
-        Printf.sprintf "{\"name\":%s,\"description\":%s}"
-          (json_string (Costs.preset_name preset))
-          (json_string desc))
-      Costs.presets
-  in
-  let knob_entries =
-    List.map
-      (fun (k : Costs.knob) ->
-        let applies = List.map json_string k.applies_to |> String.concat "," in
-        Printf.sprintf
-          "{\"key\":%s,\"label\":%s,\"unit\":%s,\"default\":%s,\"min\":%s,\"applies_to\":[%s]}"
-          (json_string k.key) (json_string k.label) (json_string k.unit)
-          (json_float k.default) (json_float k.min) applies)
-      Costs.knobs
-  in
-  let rates =
-    Printf.sprintf
-      "{\"nse_futures_txn_bps\":%s,\"nse_options_txn_bps\":%s,\"sebi_bps\":%s,\"stt_futures_bps\":%s,\"stt_options_bps\":%s,\"stamp_futures_bps\":%s,\"stamp_options_bps\":%s,\"gst\":%s}"
-      (json_float Costs.rates.nse_futures_txn_bps)
-      (json_float Costs.rates.nse_options_txn_bps)
-      (json_float Costs.rates.sebi_bps)
-      (json_float Costs.rates.stt_futures_bps)
-      (json_float Costs.rates.stt_options_bps)
-      (json_float Costs.rates.stamp_futures_bps)
-      (json_float Costs.rates.stamp_options_bps)
-      (json_float Costs.rates.gst)
-  in
-  Printf.sprintf
-    "{\n\
-     \"as_of\":%s,\n\
-     \"default_preset\":%s,\n\
-     \"defaults\":{\"slip_ticks\":%s,\"slip_range_pct\":%s,\"fee_per_order\":%s,\"call_premium_pct\":%s,\"put_premium_pct\":%s,\"opt_slip_ticks\":%s,\"opt_slip_pct\":%s,\"opt_tick_size\":%s},\n\
-     \"lot_size\":%s,\n\
-     \"initial_balance\":%s,\n\
-     \"presets\":[%s],\n\
-     \"knobs\":[%s],\n\
-     \"rates\":%s\n\
-     }\n"
-    (json_string Costs.as_of)
-    (json_string (Costs.preset_name p.preset))
-    (json_float p.slip_ticks)
-    (json_float p.slip_range_pct)
-    (json_float p.fee_per_order)
-    (json_float p.call_premium_pct)
-    (json_float p.put_premium_pct)
-    (json_float p.opt_slip_ticks)
-    (json_float p.opt_slip_pct)
-    (json_float p.opt_tick_size)
-    (json_float default_lot_size)
-    (json_float default_initial_balance)
-    (String.concat "," preset_entries)
-    (String.concat "," knob_entries)
-    rates
-
 let usage =
   "strategy [--costs PRESET] [cost options] [--from YYYY-MM-DD] [--till \
    YYYY-MM-DD]\n\n\
@@ -160,8 +68,8 @@ let parse_raw argv =
   let opt_slip_pct = ref None in
   let tick_size = ref None in
   let opt_tick_size = ref None in
-  let lot_size = ref default_lot_size in
-  let initial_balance = ref default_initial_balance in
+  let lot_size = ref Config.default_lot_size in
+  let initial_balance = ref Config.default_initial_balance in
   let from_arg = ref None in
   let till_arg = ref None in
   let print_costs = ref false in
@@ -269,21 +177,22 @@ let parse_raw argv =
   if !print_costs then
     Printf.eprintf "costs: %s [%s]\n%!" costs.desc
       (if explicit then "cli" else "default");
-  {
-    costs;
-    params;
-    lot_size = !lot_size;
-    initial_balance = !initial_balance;
-    from_ts;
-    till_ts;
-  }
+  ({
+     costs;
+     params;
+     lot_size = !lot_size;
+     initial_balance = !initial_balance;
+     from_ts;
+     till_ts;
+   }
+    : Config.t)
 
 let wants_schema argv =
   Array.exists (fun a -> a = "--schema" || a = "--costs-schema") argv
 
 let parse argv =
   if wants_schema argv then (
-    print_string (schema_json ());
+    print_string (Costs_schema.json ());
     exit 0);
   try parse_raw argv with
   | Error msg ->

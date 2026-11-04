@@ -270,7 +270,8 @@ def _fill_cost(cost_model, side, leg, qty, lot_size):
             "stamp": 0, "gst": 0, "slippage_call": 0, "slippage_put": 0,
             "call_premium": leg[2], "put_premium": leg[3],
         }
-    cost = cost_model.futures_cost(side, leg[2], leg[3], qty, lot_size)
+    lots = qty / lot_size
+    cost = cost_model.futures_cost(side, leg[2], leg[3], lots, lot_size)
     breakup = cost["breakup"]
     breakup["call_premium"] = cost["call_price"]
     breakup["put_premium"] = cost["put_price"]
@@ -615,7 +616,6 @@ def main(
     try:
         result = analyze(
             synth_bars,
-            lot_size=lot_size,
             initial=initial,
             strategy=strategy,
             data=data,

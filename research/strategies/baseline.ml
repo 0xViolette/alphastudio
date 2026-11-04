@@ -1,15 +1,8 @@
-let cfg = RheoBacktest.Costs_cli.parse Sys.argv
+let cfg = RheoBacktest.Cli.parse Sys.argv
 
-module Papa =
-  RheoBacktest.Backtest.Make
-    (struct
-      let lot_size = cfg.lot_size
-      let initial_balance = cfg.initial_balance
-      let costs = cfg.costs
-    end)
-    ()
+module Papa = RheoBacktest.Backtest.Make ()
 
-let strat () =
+let () =
   let open Papa in
   let open Papa.Ops in
   let echannel = 10 in
@@ -27,11 +20,11 @@ let strat () =
   let netequity =
     (Account.initial_balance + Account.realised_pnl) * !leverage
   in
-  let qty1 = netequity * !risk / (!atrgunak * atr * !lot_size) in
+  let qty1 = netequity * !risk / (!atrgunak * atr * lot_size) in
   let con1 = floor qty1 in
-  let qty2 = netequity / (le * !lot_size) in
+  let qty2 = netequity / (le * lot_size) in
   let con2 = floor qty2 in
-  let qty3 = netequity / (se * !lot_size) in
+  let qty3 = netequity / (se * lot_size) in
   let con3 = floor qty3 in
   let con4 = !2.0 in
   let finalcon = min con1 (min con2 con3) in
@@ -57,8 +50,5 @@ let strat () =
   observe tradecon "tradecon";
   observe atr_at_entry "atr_at_entry";
   observe lx2n "lx2n";
-  observe sx2n "sx2n"
-
-let () =
-  strat ();
+  observe sx2n "sx2n";
   Papa.run_csv_cli cfg

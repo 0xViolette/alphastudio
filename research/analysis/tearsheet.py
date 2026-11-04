@@ -57,7 +57,7 @@ def main(
         sys.exit(f"no fills found in strategy output; stderr was:\n{err}")
 
     selected = select_date_window(args.date_from, args.date_till, all_bars)
-    full_account = replay(all_bars, lot_size, initial)
+    full_account = replay(all_bars, initial)
     first = selected[0]
     start_equity = full_account.equity[first - 1] if first > 0 else initial
     start_realized = full_account.realized_pnl[first - 1] if first > 0 else 0.0
@@ -73,7 +73,7 @@ def main(
     ]
     account = AccountSeries(
         equity=equity,
-        net_lots=[full_account.net_lots[i] for i in selected],
+        net_qty=[full_account.net_qty[i] for i in selected],
         realized_pnl=realized,
         trades=trades,
         fees=sum(fill.fee for bar in bars for fill in bar.fills),
@@ -86,7 +86,7 @@ def main(
 
     if args.csv is not None:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
-        entries = _generate_trade_log(bars, cfg.preset, cfg.values, lot_size)
+        entries = _generate_trade_log(bars, cfg.preset, cfg.values)
         _write_trade_log_csv(args.csv, entries, cfg.preset, cfg.values, lot_size)
         print(f"trade log saved to: {args.csv}")
 
@@ -95,7 +95,6 @@ def main(
         result = analyze(
             bars,
             account=account,
-            lot_size=lot_size,
             initial=initial,
             strategy=strategy,
             data=data_label,

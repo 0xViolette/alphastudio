@@ -6,11 +6,11 @@ Pipeline (run from the strategy/ project root):
 Usage: python3 scripts/plot_pnl.py [meanrev|main] [--out pnl.png]
 
 The OCaml backtester prints one CSV row per bar on stdout:
-    Date,Time,Open,High,Low,Close,<probes...>,event,fill_id,fill_side,fill_price,fill_qty,fill_cost
+    Date,Time,Open,High,Low,Close,<probes...>,event,fill_id,fill_side,fill_price,fill_qty,fill_fee
 
-Fill fields are pipe-separated in matching order. We replay those fills
-through the same lot-offsetting ledger lib/ledger.ml uses, subtracting each
-fill's fees, giving the realized net pnl after every fill, and plot
+Fill fields are pipe-separated in matching order, with quantities in underlying
+units. We replay those fills through the FIFO ledger, subtracting each fill's
+fees, giving the realized net pnl after every fill, and plot
 initial_balance + realized. Slippage is already embedded in fill_price.
 Costs, lot size and the initial balance come from the shared cost wizard in
 scripts/costs.py (or its flags); the OCaml binary owns the defaults.
@@ -22,7 +22,8 @@ import sys
 from pathlib import Path
 
 import costs as cost_cli
-from engine import parse_stream
+import ledger
+from engine import Bar, Fill, parse_stream
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 EMITTER = ROOT / "research" / "emitters" / "ohlc_csv_emitter.py"
@@ -111,49 +112,13 @@ def parse_rows(out):
     ]
 
 
-def parse_fills(out):
-    """The backtest's fill stream as [(side, price, qty, fee), ...] in order."""
-    return [(side, price, qty, fee) for side, price, qty, fee, _ in parse_rows(out)]
-
-
-def is_zero(x):
-    return abs(x) < 1e-7
-
-
-def sgn(x):
-    return 0 if is_zero(x) else (1 if x > 0 else -1)
-
-
-def replay(fills, lot_size):
-    """Replay fills through the lot-offsetting ledger of lib/ledger.ml,
-    subtracting each fill's fees; returns the realized net pnl after each
-    fill plus the total fees paid."""
-    realized,  lots, out = 0.0,  [], []  # lots: [(price, signed_qty), ...]
-
-    def apply(signed_qty, price) :
-        nonlocal realized,  lots
-
-        def offset(cur, remaining):
-            nonlocal realized
-            if cur and sgn(cur[0][1]) == -sgn(remaining):
-                entry_price, lot_qty = cur[0]
-                rest = cur[1:]
-                direction = float(sgn(lot_qty))
-                closed = min(abs(lot_qty), abs(remaining))
-                realized += direction * closed * lot_size * (price - entry_price)
-                left = lot_qty - direction * closed
-                rest = rest if is_zero(left) else [(entry_price, left)] + rest
-                remaining = remaining + direction * closed
-                return rest if is_zero(remaining) else offset(rest, remaining)
-            return cur if is_zero(remaining) else cur + [(price, remaining)]
-
-        lots = offset(lots, signed_qty)
-        out.append(realized)
-
-    for side, price, qty, fee in fills:
-        realized -= fee
-        apply(side * qty, price)
-    return out
+def replay(fills):
+    """Use the shared FIFO ledger and return realized PnL after each fill."""
+    bars = [
+        Bar(dt, price, (Fill(side, price, qty, fee),))
+        for side, price, qty, fee, dt in fills
+    ]
+    return ledger.replay(bars, 0.0).realized_pnl
 
 
 def main():
@@ -174,16 +139,15 @@ def main():
     strategy = resolve_strategy(args.strategy)
     cfg = cost_cli.resolve(args)
     initial = cfg.initial_balance
-    lot_size = cfg.lot_size
     out, err = run_backtest(STRATEGIES[strategy], cfg.argv())
     if args.save_log:
         args.save_log.write_text(out)
 
-    fills = parse_fills(out)
+    fills = parse_rows(out)
     if not fills:
         sys.exit(f"no fills found in strategy output; stderr was:\n{err}")
 
-    pnl = replay(fills, lot_size)
+    pnl = replay(fills)
     # equity[0] is the account before any fill, then one point per fill
     equity = [initial] + [initial + p for p in pnl]
     xs = list(range(len(equity)))

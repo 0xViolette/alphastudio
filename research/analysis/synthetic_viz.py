@@ -261,7 +261,7 @@ def load_data(args, cfg, meta, front, month2):
 
     month2_minutes = synthetic.synthetic_close_series(nm_times, nm_nets, nm_strikes)
     bars = make_chart_bars(stream.bars, synth_bars, roll_events, month2_minutes)
-    account = replay(bars, cfg.lot_size, cfg.initial_balance)
+    account = replay(bars, cfg.initial_balance)
     if not account.trades:
         print("warning: no round-trip trades found in the data", file=sys.stderr)
 
@@ -287,11 +287,10 @@ def load_data(args, cfg, meta, front, month2):
         "bars": bars,
         "account": account,
         "equity": account.equity,
-        "net": account.net_lots,
+        "net": account.net_qty,
         "realized": account.realized_pnl,
         "trades": account.trades,
         "initial": cfg.initial_balance,
-        "lot_size": cfg.lot_size,
         "costs": f"option-derived synthetic futures + {cost_label}",
         "strategy": args.strategy,
         "data": f"{synthetic.NIFTY_CSV.name} + {synthetic.NIFTY_MONTH2_CSV.name}",

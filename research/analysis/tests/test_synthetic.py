@@ -69,6 +69,13 @@ class SyntheticTests(unittest.TestCase):
         self.assertAlmostEqual(cost["breakup"]["slippage_call"], 0.55)
         self.assertAlmostEqual(cost["breakup"]["slippage_put"], 0.45)
 
+    def test_unit_quantities_convert_to_lots_only_for_option_costs(self):
+        model = synthetic.OptionCostModel(synthetic.cost_schema())
+        leg = (0, 10000, 100, 80)
+        _, fee, _ = synthetic._fill_cost(model, 1, leg, 130, 65)
+        expected = model.futures_cost(1, 100, 80, 2, 65)["fee"]
+        self.assertAlmostEqual(fee, expected)
+
     def test_expiry_rules_and_holiday_adjustment(self):
         self.assertEqual(
             synthetic.nominal_monthly_expiry(2025, 8, datetime(2025, 8, 1).date()),

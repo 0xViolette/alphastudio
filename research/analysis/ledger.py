@@ -1,4 +1,4 @@
-"""FIFO lot accounting for parsed or synthetically transformed bars."""
+"""FIFO quantity accounting for parsed or synthetically transformed bars."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,7 +15,7 @@ def sgn(value):
 @dataclass(frozen=True, slots=True)
 class Trade:
     pnl: float
-    lots: float
+    quantity: float
     direction: str
     entry: datetime
     exit: datetime
@@ -34,33 +34,33 @@ class Trade:
 @dataclass(slots=True)
 class AccountSeries:
     equity: list[float]
-    net_lots: list[float]
+    net_qty: list[float]
     realized_pnl: list[float]
     trades: list[Trade]
     fees: float
 
 
-def replay(bars, lot_size, initial):
-    """Mark open lots to each close and record fee-net FIFO round trips."""
-    realized, lots, fees = 0.0, [], 0.0
+def replay(bars, initial):
+    """Mark open unit quantities to each close and record FIFO round trips."""
+    realized, positions, fees = 0.0, [], 0.0
     equity, net, realized_pnl, trades = [], [], [], []
     for i, bar in enumerate(bars):
         for fill in bar.fills:
             realized -= fill.fee
             fees += fill.fee
-            fee_per_lot = fill.fee / fill.qty if fill.qty else 0.0
+            fee_per_unit = fill.fee / fill.qty if fill.qty else 0.0
             remaining = fill.side * fill.qty
-            while lots and not is_zero(remaining) and sgn(lots[0][1]) == -sgn(remaining):
-                entry_price, lot_qty, entry_dt, entry_i, entry_fpl = lots[0]
-                rest = lots[1:]
-                direction = float(sgn(lot_qty))
-                closed = min(abs(lot_qty), abs(remaining))
-                gross = direction * closed * lot_size * (fill.price - entry_price)
+            while positions and not is_zero(remaining) and sgn(positions[0][1]) == -sgn(remaining):
+                entry_price, position_qty, entry_dt, entry_i, entry_fpu = positions[0]
+                rest = positions[1:]
+                direction = float(sgn(position_qty))
+                closed = min(abs(position_qty), abs(remaining))
+                gross = direction * closed * (fill.price - entry_price)
                 realized += gross
                 trades.append(
                     Trade(
-                        pnl=gross - closed * (entry_fpl + fee_per_lot),
-                        lots=closed,
+                        pnl=gross - closed * (entry_fpu + fee_per_unit),
+                        quantity=closed,
                         direction="long" if direction > 0 else "short",
                         entry=entry_dt,
                         exit=bar.dt,
@@ -72,18 +72,17 @@ def replay(bars, lot_size, initial):
                         exit_tag=fill.tag,
                     )
                 )
-                left = lot_qty - direction * closed
+                left = position_qty - direction * closed
                 if not is_zero(left):
-                    rest = [(entry_price, left, entry_dt, entry_i, entry_fpl)] + rest
-                lots = rest
+                    rest = [(entry_price, left, entry_dt, entry_i, entry_fpu)] + rest
+                positions = rest
                 remaining += direction * closed
             if not is_zero(remaining):
-                lots.append((fill.price, remaining, bar.dt, i, fee_per_lot))
+                positions.append((fill.price, remaining, bar.dt, i, fee_per_unit))
         unrealized = sum(
-            sgn(qty) * abs(qty) * lot_size * (bar.close - price)
-            for price, qty, _, _, _ in lots
+            qty * (bar.close - price) for price, qty, _, _, _ in positions
         )
         equity.append(initial + realized + unrealized)
         realized_pnl.append(realized)
-        net.append(sum(qty for _, qty, _, _, _ in lots))
+        net.append(sum(qty for _, qty, _, _, _ in positions))
     return AccountSeries(equity, net, realized_pnl, trades, fees)

@@ -40,7 +40,6 @@ class Performance:
 def analyze(
     bars,
     *,
-    lot_size,
     initial,
     strategy,
     data,
@@ -59,7 +58,7 @@ def analyze(
     if benchmark_equity is not None and len(benchmark_equity) != len(bars):
         raise ValueError("benchmark equity must align with strategy bars")
 
-    account = account or replay(bars, lot_size, initial)
+    account = account or replay(bars, initial)
     equity = account.equity
     trades = account.trades
     dates = [bar.dt for bar in bars]
@@ -301,7 +300,7 @@ def analyze(
         max_loss_date=worst_t.exit if worst_t else None,
         total_fees=account.fees, gross_win=gross_win,
         cost_model=cost_model, initial_source=initial_source,
-        exposure=sum(1 for qty in account.net_lots if not is_zero(qty)) / n_bars,
+        exposure=sum(1 for qty in account.net_qty if not is_zero(qty)) / n_bars,
         var95=quantile(rets, 0.05), var99=quantile(rets, 0.01),
         cvar95=cvar(rets, 0.05), cvar99=cvar(rets, 0.01),
         skew=skew, kurt=kurt,

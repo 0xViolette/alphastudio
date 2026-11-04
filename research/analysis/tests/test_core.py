@@ -1,5 +1,6 @@
 import io
 import math
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -24,11 +25,11 @@ def account_bars():
         return engine.Bar(datetime.fromisoformat(stamp), close, tuple(fills))
 
     return [
-        bar("2024-01-01 10:00", 105, [engine.Fill(1, 100, 2, 20, "LE")]),
-        bar("2024-01-01 11:00", 110, [engine.Fill(-1, 110, 1, 5, "2NL")]),
-        bar("2024-01-02 10:00", 95, [engine.Fill(-1, 95, 2, 10, "SE")]),
+        bar("2024-01-01 10:00", 105, [engine.Fill(1, 100, 200, 20, "LE")]),
+        bar("2024-01-01 11:00", 110, [engine.Fill(-1, 110, 100, 5, "2NL")]),
+        bar("2024-01-02 10:00", 95, [engine.Fill(-1, 95, 200, 10, "SE")]),
         bar("2024-01-02 11:00", 90),
-        bar("2024-01-02 12:00", 85, [engine.Fill(1, 85, 1, 5, "2NS")]),
+        bar("2024-01-02 12:00", 85, [engine.Fill(1, 85, 100, 5, "2NS")]),
     ]
 
 
@@ -36,7 +37,6 @@ def result_without_benchmark():
     bars = account_bars()
     return performance.analyze(
         bars,
-        lot_size=100,
         initial=10_000,
         strategy="fixture",
         data="fixture.csv",
@@ -69,7 +69,7 @@ class EngineTests(unittest.TestCase):
     def test_explicit_fill_columns_replace_manifest(self):
         text = (
             "Date,Time,Open,High,Low,Close,event,fill_id,fill_side,"
-            "fill_price,fill_qty,fill_cost\n"
+            "fill_price,fill_qty,fill_fee\n"
             "01/01/24,09:15 AM,99,102,98,101,"
             "new entry filled | new exit filled,new entry|new exit,+1|-1,"
             "100|101,2|1,3|4\n"
@@ -111,6 +111,32 @@ class EngineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "event/fill columns disagree"):
             engine.parse_stream(text)
 
+    def test_ocaml_csv_units_and_fees_match_python_ledger(self):
+        subprocess.run(
+            ["dune", "build", "rheo-backtest/test/test_backtest.exe"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        proc = subprocess.run(
+            [
+                str(ROOT / "_build/default/rheo-backtest/test/test_backtest.exe"),
+                "--emit-csv",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        stream = engine.parse_stream(proc.stdout)
+        fills = [fill for bar in stream.bars for fill in bar.fills]
+        self.assertEqual([fill.qty for fill in fills], [14, 14])
+        self.assertEqual([fill.fee for fill in fills], [20, 20])
+        account = ledger.replay(stream.bars, 1000)
+        self.assertEqual(account.realized_pnl[-1], -96)
+        self.assertEqual(account.equity[-1], 904)
+
     def test_emitter_failure_is_not_hidden(self):
         emitter = Mock()
         emitter.returncode = 1
@@ -124,9 +150,9 @@ class EngineTests(unittest.TestCase):
 
 class LedgerTests(unittest.TestCase):
     def test_fifo_partial_close_reversal_shorts_fees_and_mtm(self):
-        account = ledger.replay(account_bars(), 100, 10_000)
+        account = ledger.replay(account_bars(), 10_000)
         self.assertEqual(account.equity, [10980, 11975, 10465, 10965, 11460])
-        self.assertEqual(account.net_lots, [2, 1, -1, -1, 0])
+        self.assertEqual(account.net_qty, [200, 100, -100, -100, 0])
         self.assertEqual(account.realized_pnl, [-20, 975, 465, 465, 1460])
         self.assertEqual(account.fees, 40)
         self.assertEqual([trade.pnl for trade in account.trades], [985, -515, 990])
@@ -140,6 +166,11 @@ class LedgerTests(unittest.TestCase):
             [trade.exit_tag for trade in account.trades], ["2NL", "SE", "2NS"]
         )
 
+    def test_plot_replay_uses_unit_quantities(self):
+        dt = datetime(2024, 1, 1)
+        fills = [(1, 100, 130, 0, dt), (-1, 110, 130, 0, dt)]
+        self.assertEqual(plot_pnl.replay(fills), [0, 1300])
+
 
 class PerformanceTests(unittest.TestCase):
     def test_performance_uses_first_session_and_source_benchmark(self):
@@ -147,7 +178,6 @@ class PerformanceTests(unittest.TestCase):
         benchmark = [10_000 * bar.close / bars[0].close for bar in bars]
         result = performance.analyze(
             bars,
-            lot_size=100,
             initial=10_000,
             strategy="fixture",
             data="fixture.csv",
@@ -174,12 +204,11 @@ class PerformanceTests(unittest.TestCase):
 
     def test_viz_footer_shares_tearsheet_definitions(self):
         bars = account_bars()
-        account = ledger.replay(bars, 100, 10_000)
+        account = ledger.replay(bars, 10_000)
         ctx = {
             "dates": [bar.dt for bar in bars],
             "bars": bars,
             "account": account,
-            "lot_size": 100,
             "initial": 10_000,
             "strategy": "fixture",
             "data": "fixture.csv",

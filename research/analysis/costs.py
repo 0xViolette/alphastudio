@@ -1,7 +1,7 @@
 """Shared cost + period configuration for the Python report/plot scripts.
 
 The OCaml binary owns the defaults and the rate card. This module fetches its
-schema from rheo-backtest/costs_schema.json (regenerated via `rheo-backtest --schema`),
+schema from rheo-backtest/costs_schema.json (regenerated via `rheo-backtest-config --schema`),
 prompts for a cost model and a backtest period on a TTY, and turns the answers
 into flags passed after `dune exec <target> --`. The period (--from/--till,
 YYYY-MM-DD, IST) defaults to the full data range; the wizard shows the range

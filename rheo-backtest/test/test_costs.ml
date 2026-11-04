@@ -20,7 +20,7 @@ let check_str label got want =
   Printf.printf "  %-34s got=%-18s want=%-18s %s\n" label got want
     (if ok then "OK" else "MISMATCH")
 
-let bar : Codec.Ohlc.bar =
+let bar : Bar.t =
   {
     timestamp = 0L;
     open_ = 20_000.;
@@ -56,7 +56,7 @@ let raises f =
   try
     f ();
     false
-  with Costs_cli.Error _ | Invalid_argument _ -> true
+  with Cli.Error _ | Invalid_argument _ -> true
 
 let () =
   print_endline "== cost models";
@@ -82,6 +82,30 @@ let () =
        (Order.Limit 22_800.) Order.Buy)
       .slippage
     0.;
+
+  let gap_bar : Bar.t =
+    {
+      timestamp = 0L;
+      open_ = 24_513.;
+      high = 24_530.;
+      low = 24_493.;
+      close = 24_513.;
+    }
+  in
+  let gap_ctx side =
+    {
+      Costs.side = side;
+      kind = Order.Market;
+      price = 24_513.;
+      lots = 1.;
+      lot_size = 65.;
+      bar = gap_bar;
+    }
+  in
+  let buy = futures.Costs.apply (gap_ctx Order.Buy) in
+  let sell = futures.Costs.apply (gap_ctx Order.Sell) in
+  check "buy slippage rounds up to tick" (24_513. +. buy.slippage) 24_513.5;
+  check "sell slippage rounds down to tick" (24_513. -. sell.slippage) 24_512.5;
 
   let synthetic =
     Costs.of_params
@@ -147,10 +171,10 @@ let () =
            (Costs.of_params { Costs.default_params with opt_tick_size = 0. })));
 
   print_endline "== CLI";
-  let cfg = Costs_cli.parse_raw [| "strategy"; "--costs"; "none" |] in
+  let cfg = Cli.parse_raw [| "strategy"; "--costs"; "none" |] in
   check_str "cli none" cfg.costs.name "none";
   let cfg =
-    Costs_cli.parse_raw
+    Cli.parse_raw
       [|
         "strategy";
         "--costs";
@@ -166,12 +190,12 @@ let () =
   check "cli lot size" cfg.lot_size 70.;
   check_bool "cli invalid slip"
     (raises (fun () ->
-         ignore (Costs_cli.parse_raw [| "strategy"; "--slip-ticks"; "-1." |])));
+         ignore (Cli.parse_raw [| "strategy"; "--slip-ticks"; "-1." |])));
   check_bool "cli unknown preset"
     (raises (fun () ->
-         ignore (Costs_cli.parse_raw [| "strategy"; "--costs"; "bogus" |])));
+         ignore (Cli.parse_raw [| "strategy"; "--costs"; "bogus" |])));
   let cfg =
-    Costs_cli.parse_raw
+    Cli.parse_raw
       [|
         "strategy";
         "--costs";
@@ -186,22 +210,22 @@ let () =
   check_bool "cli till is exclusive" (cfg.till_ts = Some 1735669800L);
   check_bool "cli leap day"
     (raises (fun () ->
-         ignore (Costs_cli.parse_raw [| "strategy"; "--from"; "2023-02-29" |])));
+         ignore (Cli.parse_raw [| "strategy"; "--from"; "2023-02-29" |])));
   check_bool "cli feb 30 rejected"
     (raises (fun () ->
-         ignore (Costs_cli.parse_raw [| "strategy"; "--from"; "2024-02-30" |])));
+         ignore (Cli.parse_raw [| "strategy"; "--from"; "2024-02-30" |])));
   check_bool "cli bad month"
     (raises (fun () ->
-         ignore (Costs_cli.parse_raw [| "strategy"; "--from"; "2024-13-01" |])));
+         ignore (Cli.parse_raw [| "strategy"; "--from"; "2024-13-01" |])));
   check_bool "cli bad format"
     (raises (fun () ->
-         ignore (Costs_cli.parse_raw [| "strategy"; "--from"; "01-01-2024" |])));
+         ignore (Cli.parse_raw [| "strategy"; "--from"; "01-01-2024" |])));
   check_bool "cli from after till"
     (raises (fun () ->
          ignore
-           (Costs_cli.parse_raw
+           (Cli.parse_raw
               [| "strategy"; "--from"; "2025-01-01"; "--till"; "2024-01-01" |])));
-  let schema = Costs_cli.schema_json () in
+  let schema = Costs_schema.json () in
   let contains needle =
     let n = String.length needle in
     let rec loop i =

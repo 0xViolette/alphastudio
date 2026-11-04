@@ -3,8 +3,9 @@
    A model [t] maps each fill's context to a [result]: [slippage] is an
    adverse price adjustment in price units (buys fill higher, sells lower;
    the broker adds dir * slippage to the raw fill price) and [fee] is a
-   cash amount debited from the account. Fill *detection* never depends on
-   costs — only the executed price and the fee do.
+   cash amount debited from the account. Market/stop execution prices are
+   rounded adversely to the instrument tick after slippage. Fill *detection*
+   never depends on costs — only the executed price and the fee do.
 
    Rates are the NSE equity-derivatives schedule as of 2026-10-22:
      - NSE futures transaction charge  0.00183% each side (IPFT included)
@@ -27,7 +28,7 @@ type fill_ctx = {
   price : float; (* raw fill price, before slippage *)
   lots : float;
   lot_size : float;
-  bar : Codec.Ohlc.bar;
+  bar : Bar.t;
 }
 
 type result = { slippage : float; fee : float }
@@ -159,7 +160,7 @@ let slip_ticks n ~tick_size_ _ = n *. tick_size_
 
 let slip_range_frac f ctx =
   let b = ctx.bar in
-  f *. (b.Codec.Ohlc.high -. b.Codec.Ohlc.low)
+  f *. (b.Bar.high -. b.Bar.low)
 
 let slip_sum parts ctx = List.fold_left (fun acc f -> acc +. f ctx) 0. parts
 
@@ -176,23 +177,30 @@ let tax_on rate parts ctx = rate *. fee_sum parts ctx
 
 (* ---- composition ---- *)
 
-let make ~name ~desc ~slip ~fee () =
+let make ~name ~desc ~tick_size ~slip ~fee () =
   let open Order in
   {
     name;
     desc;
     apply =
       (fun ctx ->
-        (* market and stop orders cross the spread; limit fills rest at
-            their price and never slip *)
-        let slippage =
-          match ctx.kind with
-          | Market | Stop _ -> Float.max 0. (slip ctx)
-          | Limit _ -> 0.
-        in
         let dir = Float.of_int (sign_of_side ctx.side) in
-        let exec_price = ctx.price +. (dir *. slippage) in
-        (* turnover-based fees are charged on the executed price *)
+        let exec_price, slippage =
+          match ctx.kind with
+          | Limit _ -> (ctx.price, 0.)
+          | Market | Stop _ ->
+              let unrounded =
+                ctx.price +. (dir *. Float.max 0. (slip ctx))
+              in
+              let tick = tick_size ctx in
+              let ticks = unrounded /. tick in
+              let rounded =
+                match ctx.side with Buy -> Float.ceil ticks | Sell -> Float.floor ticks
+              in
+              let exec_price = rounded *. tick in
+              (exec_price, dir *. (exec_price -. ctx.price))
+        in
+        (* turnover-based fees are charged on the final executed price *)
         { slippage; fee = Float.max 0. (fee { ctx with price = exec_price }) });
   }
 
@@ -215,9 +223,12 @@ let futures p =
     ~desc:
       (Printf.sprintf
          "futures (NSE, rates as of %s): slip %.2g tick + %g%% bar range \
-          (mkt/stop); fee flat %g + txn 0.183bps + sebi 0.01bps + stt \
-          5bps(sell) + stamp 0.2bps(buy) + 18%% GST on (flat+txn+sebi)"
-         as_of p.slip_ticks p.slip_range_pct p.fee_per_order)
+          (mkt/stop); fee flat %g + txn %gbps + sebi %gbps + stt \
+          %gbps(sell) + stamp %gbps(buy) + %g%% GST on (flat+txn+sebi)"
+         as_of p.slip_ticks p.slip_range_pct p.fee_per_order
+         rates.nse_futures_txn_bps rates.sebi_bps rates.stt_futures_bps
+         rates.stamp_futures_bps (rates.gst *. 100.))
+    ~tick_size:(tick_size p)
     ~slip:(fun ctx ->
       slip_sum
         [
@@ -233,6 +244,7 @@ let simple p =
     ~desc:
       (Printf.sprintf "simple: slip %.2g tick (mkt/stop); fee flat %g"
          p.slip_ticks p.fee_per_order)
+    ~tick_size:(tick_size p)
     ~slip:(fun ctx -> slip_ticks p.slip_ticks ~tick_size_:(tick_size p ctx) ctx)
     ~fee:(fee_per_order p.fee_per_order)
     ()
@@ -268,11 +280,14 @@ let synthetic p =
       (Printf.sprintf
          "synthetic futures (options, rates as of %s): call premium %g%%, put \
           premium %g%%; slip per leg %.2g x %.2g tick + %g%% premium \
-          (mkt/stop); fee 2 x flat %g + txn 3.553bps + sebi 0.01bps on both \
-          legs + stt 15bps(sell leg) + stamp 0.3bps(buy leg) + 18%% GST on \
+          (mkt/stop); fee 2 x flat %g + txn %gbps + sebi %gbps on both \
+          legs + stt %gbps(sell leg) + stamp %gbps(buy leg) + %g%% GST on \
           (brokerage+txn+sebi)"
          as_of p.call_premium_pct p.put_premium_pct p.opt_slip_ticks
-         p.opt_tick_size p.opt_slip_pct p.fee_per_order)
+         p.opt_tick_size p.opt_slip_pct p.fee_per_order
+         rates.nse_options_txn_bps rates.sebi_bps rates.stt_options_bps
+         rates.stamp_options_bps (rates.gst *. 100.))
+    ~tick_size:(tick_size p)
     ~slip:(fun ctx -> leg_slip call_premium ctx +. leg_slip put_premium ctx)
     ~fee:(fee_sum [ brokerage; txn; sebi; stt; stamp; gst ])
     ()

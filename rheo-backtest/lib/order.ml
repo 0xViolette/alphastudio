@@ -12,19 +12,11 @@ type fill = {
   fees : float;
 }
 
-type order = {
-  id : string;
-  seq : int;
-  side : side;
-  kind : float kind;
-  lots : float;
-}
-
 type request = { id : string; action : action; kind : float kind }
 
 and action =
   | Enter_long of float
     (* be long [target]; covers a short first; no pyramiding *)
   | Enter_short of float
-  | Exit_long (* flatten a long; no-op otherwise *)
-  | Exit_short
+  | Exit_long (* flatten a long; wait when flat *)
+  | Exit_short (* flatten a short; wait when flat *)

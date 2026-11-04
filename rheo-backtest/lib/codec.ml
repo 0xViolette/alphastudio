@@ -1,15 +1,23 @@
+(* OHLC protocol
+   - Encoding: binary
+   - Byte order: little-endian
+   - Message size: 40 bytes
+   - Floating-point representation: IEEE 754 binary64 (`float64`)
+
+   +--------+------+---------+-----------+
+   | Offset | Size | Type    | Field     |
+   +--------+------+---------+-----------+
+   | 0      | 8    | uint64  | timestamp |
+   | 8      | 8    | float64 | open      |
+   | 16     | 8    | float64 | high      |
+   | 24     | 8    | float64 | low       |
+   | 32     | 8    | float64 | close     |
+   +--------+------+---------+-----------+
+*)
 module Ohlc = struct
   let message_size = 40
 
-  type bar = {
-    timestamp : int64;
-    open_ : float;
-    high : float;
-    low : float;
-    close : float;
-  }
-
-  let decode bytes : bar =
+  let decode bytes : Bar.t =
     let bytes_to_float offset =
       Int64.float_of_bits (Bytes.get_int64_le bytes offset)
     in

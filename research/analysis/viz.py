@@ -265,8 +265,7 @@ def load_data(args, cfg):
         sys.exit("empty data stream")
 
     initial = cfg.initial_balance
-    lot_size = cfg.lot_size
-    account = replay(bars, lot_size, initial)
+    account = replay(bars, initial)
     if not account.trades:
         print("warning: no round-trip trades found in the data",
               file=sys.stderr)
@@ -289,10 +288,10 @@ def load_data(args, cfg):
         "bars": bars,
         "account": account,
         "equity": account.equity,
-        "net": account.net_lots,
+        "net": account.net_qty,
         "realized": account.realized_pnl,
         "trades": account.trades,
-        "initial": initial, "lot_size": lot_size, "costs": cfg.label(),
+        "initial": initial, "costs": cfg.label(),
         "strategy": args.strategy, "data": data_name, "args": args,
     }
 
@@ -503,7 +502,6 @@ def stats_footer(ctx):
     result = analyze(
         ctx["bars"],
         account=ctx["account"],
-        lot_size=ctx["lot_size"],
         initial=ctx["initial"],
         strategy=ctx["strategy"],
         data=ctx["data"],

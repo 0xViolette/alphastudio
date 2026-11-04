@@ -5,13 +5,10 @@ import csv
 import costs as cost_cli
 
 
-def _generate_trade_log(bars, preset, values, lot_size):
-    """Generate a trade log from bars by tracking position.
-
-    Returns a list of dicts with fill metadata.
-    """
+def _generate_trade_log(bars, preset, values):
+    """Generate a trade log from bars by tracking signed unit quantity."""
     trade_log = []
-    position = 0.0  # signed lots currently held
+    position = 0.0
 
     for bar in bars:
         dt = bar.dt
@@ -59,9 +56,9 @@ def _generate_trade_log(bars, preset, values, lot_size):
 
     return trade_log
 
-def _cost_breakup_futures(price, qty, side, lot_size, values, rates):
-    """Compute cost breakup for futures cost model."""
-    turnover = price * qty * lot_size
+def _cost_breakup_futures(price, qty, side, values, rates):
+    """Compute futures costs from price and unit quantity."""
+    turnover = price * qty
     brokerage = values.get("fee_per_order", 20.0)
     txn = rates["nse_futures_txn_bps"] * 1e-4 * turnover
     sebi = rates["sebi_bps"] * 1e-4 * turnover
@@ -107,13 +104,14 @@ def _cost_breakup_simple(
     }
 
 def _cost_breakup_synthetic_futures(price, qty, side, lot_size, values, rates):
-    """Compute cost breakup for synthetic_futures cost model (estimated premiums)."""
+    """Compute option costs for a unit quantity of synthetic futures."""
     call_px = price * values.get("call_premium_pct", 1.0) / 100.0
     put_px = price * values.get("put_premium_pct", 0.8) / 100.0
+    lots = qty / lot_size
 
     def leg(leg_side, premium):
         return cost_cli.option_leg_breakup(
-            leg_side, premium, qty, lot_size,
+            leg_side, premium, lots, lot_size,
             values.get("fee_per_order", 20.0), rates,
         )
 
@@ -175,7 +173,7 @@ def _write_trade_log_csv(path, trade_log, preset, values, lot_size):
                 order_qty = entry.get("_order_qty", entry["qty"])
                 share = entry["qty"] / order_qty if order_qty else 1.0
                 bk = _cost_breakup_futures(
-                    entry["price"], order_qty, side, lot_size, values, rates,
+                    entry["price"], order_qty, side, values, rates,
                 )
                 bk = {key: value * share for key, value in bk.items()}
                 writer.writerow([

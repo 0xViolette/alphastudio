@@ -145,7 +145,11 @@ def parse_stream(text, *, side_for=None):
     if (i_id is None) != (i_side is None):
         raise ValueError("fill_id and fill_side must appear together")
     i_price, i_qty = header.index("fill_price"), header.index("fill_qty")
-    i_cost = header.index("fill_cost") if "fill_cost" in header else None
+    i_fee = (
+        header.index("fill_fee") if "fill_fee" in header
+        else header.index("fill_cost") if "fill_cost" in header
+        else None
+    )
     probe_names = header[i_c + 1:i_event]
 
     def legacy_fill_side(tag):
@@ -184,9 +188,9 @@ def parse_stream(text, *, side_for=None):
             sides = [legacy_fill_side(tag) for tag in fill_tags]
         prices = _split_fill_column(row[i_price])
         quantities = _split_fill_column(row[i_qty])
-        costs = (
-            _split_fill_column(row[i_cost])
-            if i_cost is not None
+        fees = (
+            _split_fill_column(row[i_fee])
+            if i_fee is not None
             else ["0"] * len(fill_tags)
         )
         if not (
@@ -194,16 +198,16 @@ def parse_stream(text, *, side_for=None):
             == len(sides)
             == len(prices)
             == len(quantities)
-            == len(costs)
+            == len(fees)
         ):
             raise ValueError(
                 f"event/fill columns disagree on row {row[0:2]}: "
-                f"{row[i_event:i_cost if i_cost is not None else i_qty + 1]}"
+                f"{row[i_event:i_fee if i_fee is not None else i_qty + 1]}"
             )
         fills = [
-            Fill(side, float(price), float(qty), float(cost or 0), tag)
-            for tag, side, price, qty, cost in zip(
-                fill_tags, sides, prices, quantities, costs
+            Fill(side, float(price), float(qty), float(fee or 0), tag)
+            for tag, side, price, qty, fee in zip(
+                fill_tags, sides, prices, quantities, fees
             )
         ]
         probes = {

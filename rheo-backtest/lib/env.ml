@@ -1,16 +1,11 @@
 (* The trading environment a backtest exposes to the graph: bar inputs,
-   account/position state mirrored from the broker, and derived reads. *)
-module Make
-    (D : Rheo.Dsl.S)
-    (B : sig
-      val broker : Broker.t
-    end) =
-struct
+   account/position inputs, and derived signals. *)
+module Make (D : Rheo.Dsl.S) = struct
   let open_ : float D.signal = D.input ()
   let high : float D.signal = D.input ()
   let low : float D.signal = D.input ()
   let close : float D.signal = D.input ()
-  let lot_size = B.broker.lot_size
+  let lot_size = D.input ()
 
   module Account = struct
     let cash : float D.signal = D.input ()
@@ -31,7 +26,7 @@ struct
     let entered_short = is_short && pre direction >= !0.
     let entered_trade = entered_long || entered_short
     let exited_trade = is_flat && pre direction <> !0.
-    let entry_price = D.read (fun _ -> Broker.entry_price B.broker)
-    let avg_entry_price = D.read (fun _ -> Broker.avg_entry_price B.broker)
+    let entry_price = input ()
+    let avg_entry_price = input ()
   end
 end

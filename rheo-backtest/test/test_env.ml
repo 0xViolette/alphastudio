@@ -1,15 +1,6 @@
 open RheoBacktest
 module D = Rheo.Dsl.Make ()
-
-let broker = Broker.create ~lot_size:1. ~initial_balance:1_000. ()
-
-module Env =
-  Env.Make
-    (D)
-    (struct
-      let broker = broker
-    end)
-
+module Env = Env.Make (D)
 module Machine = (val D.compile ())
 
 let failures = ref 0
@@ -21,8 +12,11 @@ let step direction =
       D.Set (Env.high, 0.);
       D.Set (Env.low, 0.);
       D.Set (Env.close, 0.);
+      D.Set (Env.lot_size, 1.);
       D.Set (Env.Position.direction, direction);
       D.Set (Env.Position.open_lots, Float.abs direction);
+      D.Set (Env.Position.entry_price, nan);
+      D.Set (Env.Position.avg_entry_price, nan);
       D.Set (Env.Account.initial_balance, 1_000.);
       D.Set (Env.Account.cash, 1_000.);
       D.Set (Env.Account.realised_pnl, 0.);

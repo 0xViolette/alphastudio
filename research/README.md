@@ -12,7 +12,7 @@ The strategy engine is OCaml; analysis and reporting use Python:
 
 ```
 ../docs/protocol/ohlc.md  binary input format
-../rheo/lib/          DSL (Rheo), compiler, broker, OMS, reporting
+../rheo/lib/          DSL (Rheo), compiler, and signal runtime
 strategies/           strategy executables
 ../rheo/examples/     executable DSL examples
 ../rheo/test/         semantics test suites
@@ -58,7 +58,7 @@ dune exec rheo/examples/breakout.exe  # recurrence bootstrapping
 | `lib/dsl.ml` | combinator implementation, `Ops`, indicators, `compile` |
 | `lib/machine.ml` | graph-to-instruction compiler and the stepping runtime |
 
-| `rheo-backtest` package | `Backtest`, `Broker`, `Oms`, `Order`, `Env`, `Feed`, `Codec`, `Report`, `Costs`, `Ta` |
+| `rheo-backtest` package | `Backtest`, `Broker`, `Portfolio`, `Order`, `Env`, `Bar`, `Feed`, `Codec`, `Bar_report`, `Costs` |
 
 ## The DSL
 
@@ -127,12 +127,8 @@ branch that is not selected may still be pending.
 `pre` is hash-consed: `pre s` always returns the same node, so repeated use
 does not duplicate history. `window n` expands to `n-1` nested `pre` nodes.
 
-`read` is the escape hatch for state outside the graph. The backtest harness
-uses it to expose the broker's entry price:
-
-```ocaml
-let entry_price = M.read (fun () -> Broker.entry_price broker)
-```
+`read` is the escape hatch for genuinely external state. The backtester supplies
+all standard bar, account, and position state through explicit inputs instead.
 
 ### Recurrence
 
@@ -250,14 +246,15 @@ for a real strategy, feed bars from the backtest harness instead.
 
 - the DSL and its machine,
 - bar inputs `open_`, `high`, `low`, `close`,
-- `Account.cash`, `Account.initial_balance`, `Account.realised_pnl`,
+- `Account.cash` (true cash after realized PnL and fees),
+  `Account.initial_balance`, and `Account.realised_pnl`,
 - `Position.direction` (`1.`, `0.`, `-1.`), `Position.open_lots`,
   `Position.entry_price`, `Position.avg_entry_price`,
 - `Position.is_long`, `is_short`, `is_flat`, `entered_long`, `entered_short`,
   `entered_trade` (including direct reversals), and `exited_trade` (transition
   to flat),
-- `Indicator` including `Ta`,
-- order constructors and `backtest`.
+- `Ta` indicators,
+- order constructors, `run`, and `run_csv_cli`.
 
 Order constructors register signal-valued requests behind the scenes. The
 requests are evaluated after a bar closes and become live for the next bar. If
@@ -265,25 +262,23 @@ their condition remains true they are recomputed and re-placed on each bar.
 `observe` similarly registers a signal for reporting under a column name.
 
 ```ocaml
-open Rheo
+open RheoBacktest
+
+let cfg = Cli.parse Sys.argv
 module B = Backtest.Make ()
 
 let () =
   let open B in
   let open B.Ops in
-  let fast = Indicator.ema 20 close in
-  let slow = Indicator.ema 65 close in
-  let go_long = Indicator.crossover fast slow in
-  let go_flat = Indicator.crossunder fast slow in
+  let fast = Ta.ema 20 close in
+  let slow = Ta.ema 65 close in
+  let go_long = Ta.crossover fast slow in
+  let go_flat = Ta.crossunder fast slow in
   enter_long "LE" !1.0 (Stop close) go_long;
   exit_long "LX" (Stop close) go_flat;
   observe fast "fast";
   observe slow "slow";
-  Printf.printf "%s\n" (Report.csv_header [ "fast"; "slow" ]);
-  backtest
-    ~on_bar:(fun r -> Printf.printf "%s\n" (Report.csv_row r))
-    ()
-;;
+  B.run_csv_cli cfg
 ```
 
 Order constructors and observation registration:
@@ -299,7 +294,8 @@ observe     : float signal -> string -> unit
 The numeric argument to `enter_*` is a target size in lots. `exit_*` flatten
 the current position. A request against the current position is netted into a
 single order, so one request can close a long and open a short. Same-direction
-adds are blocked, i.e. there is no pyramiding.
+adds are blocked, i.e. there is no pyramiding. An exit submitted while flat is
+retained and activates if an entry fills later on that bar.
 
 Kind constructors are `Market`, `Limit price`, and `Stop price`.
 
@@ -320,15 +316,18 @@ Fill rules:
   level, otherwise fill intrabar when the level lies within `[low, high]`;
 - the intrabar path is inferred as `OHLC` when the open is closer to the high
   and `OLHC` when it is closer to the low, which also sequences multiple fills;
-- trigger prices use the raw price; slippage and fees apply to the execution.
+- price-triggered gap fills use incoming-path priority and precede market orders;
+- trigger prices use the raw price; slippage and fees apply to the execution;
+- slipped market/stop execution prices round adversely to the instrument tick.
 
 Fills go through a pluggable cost hook that can adjust the executed price and
 debit fees; limit fills do not slip.
 
-`Report.csv_row` emits:
+`Bar_report.csv_row` emits the following, with fill quantities in underlying
+units:
 
 ```
-Date,Time,Open,High,Low,Close,<probes...>,event,fill_id,fill_side,fill_price,fill_qty,fill_cost
+Date,Time,Open,High,Low,Close,<observations...>,event,fill_id,fill_side,fill_price,fill_qty,fill_fee
 ```
 
 The report renders timestamps in IST (UTC+5:30) as `DD/MM/YY` and

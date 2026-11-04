@@ -5,3 +5,11 @@
 (test
  (name test_env)
  (libraries rheo rheo-backtest))
+
+(test
+ (name test_execution)
+ (libraries rheo-backtest))
+
+(test
+ (name test_backtest)
+ (libraries rheo-backtest))
