@@ -11,9 +11,12 @@ let () =
   let atrgunak = 2. in
   let ma = 65 in
   let atrbars = 20 in
-  let le = Ta.highest echannel close + !0.05 in
-  let se = Ta.lowest echannel close - !0.05 in
+  let le = Ta.highest echannel high + !0.05 in
+  let se = Ta.lowest echannel low - !0.05 in
   let entered_trade = Position.entered_trade in
+  let bars_in_trade = Ta.bars_since entered_trade in
+  let no_profit_long = close <= Position.entry_price in
+  let no_profit_short = close >= Position.entry_price in
   let atr1 = Ta.sma atrbars Ta.tr in
   let atr = Ta.ema 20 atr1 in
   let mov = Ta.ema ma close in
@@ -41,8 +44,8 @@ let () =
   let bullish = close > mov and bearish = close < mov in
   let trail_mult = 2.0 in
   let trail_n = 22 in
-  let chand_l = Ta.highest trail_n close + (!trail_mult * atr) in
-  let chand_s = Ta.lowest trail_n close + (!trail_mult * atr) in
+  let chand_l = Ta.highest trail_n high - (!trail_mult * atr) in
+  let chand_s = Ta.lowest trail_n low + (!trail_mult * atr) in
   exit_long "2NL" (Stop lx2n) (Position.entry_price > se);
   exit_long "TRL" (Stop chand_l)
     (chand_l > Position.entry_price && chand_l < close);
@@ -53,6 +56,8 @@ let () =
   enter_long "LE" tradecon (Stop le) bullish;
   exit_long "SE cover" (Stop se) bearish;
   enter_short "SE" tradecon (Stop se) bearish;
+  exit_long "TIME" Market (Position.is_long && ((bars_in_trade > !13. && no_profit_long) || (bars_in_trade > !39.)));
+  exit_short "TIME" Market (Position.is_short && ((bars_in_trade > !13. && no_profit_short) || (bars_in_trade > !39.)));
   observe atr1 "atr1";
   observe atr "atr";
   observe mov "mov";

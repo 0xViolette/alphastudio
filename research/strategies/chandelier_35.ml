@@ -41,7 +41,7 @@ let () =
   let bullish = close > mov and bearish = close < mov in
   let trail_mult = 2.0 in
   let trail_n = 22 in
-  let chand_l = Ta.highest trail_n high + (!trail_mult * atr) in
+  let chand_l = Ta.highest trail_n high - (!trail_mult * atr) in
   let chand_s = Ta.lowest trail_n low + (!trail_mult * atr) in
   exit_long "2NL" (Stop lx2n) (Position.entry_price > se);
   exit_long "TRL" (Stop chand_l)

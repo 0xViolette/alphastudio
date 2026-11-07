@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$TITLE</title>
+<style>$CSS</style>
+</head>
+<body>
+<main class="container">
+<header class="hero">
+  <div>
+    <p class="eyebrow">AlphaStudio analytics</p>
+    <h1 id="report-title"></h1>
+    <p id="report-subtitle" class="subtitle"></p>
+  </div>
+  <button id="theme-toggle" class="button" type="button">Dark theme</button>
+</header>
+<noscript>This report requires JavaScript to render its tables and charts.</noscript>
+<section id="summary-cards" class="cards" aria-label="Performance summary"></section>
+<section class="panel"><h2>Account</h2><table class="stats"><tbody id="overview"></tbody></table></section>
+<div id="sections"></div>
+<section id="benchmark" class="panel" hidden><h2>Versus buy &amp; hold</h2><table class="stats"><tbody id="benchmark-rows"></tbody></table></section>
+<section id="monthly" class="panel" hidden><h2>Monthly account returns</h2><div class="table-scroll"><table class="monthly"><thead id="monthly-head"></thead><tbody id="monthly-body"></tbody></table></div></section>
+<section id="monthly-points" class="panel" hidden><h2>Monthly closed-trade points</h2><div class="table-scroll"><table class="monthly"><thead id="monthly-points-head"></thead><tbody id="monthly-points-body"></tbody></table></div></section>
+<section id="eoy-section" class="panel"><h2>End-of-year returns</h2><div class="table-scroll"><table id="eoy-table" class="stats"></table></div></section>
+<section id="worst-drawdowns" class="panel" hidden><h2>Ten worst drawdowns</h2><div class="table-scroll"><table id="drawdown-table" class="stats"></table></div></section>
+<section id="rolling-section" class="panel" hidden><h2>Rolling analysis · 126 sessions</h2><div class="chart-grid">
+  <div><h3>Rolling Sharpe</h3><div id="rolling-sharpe" class="mini-chart"></div></div>
+  <div><h3>Rolling Sortino</h3><div id="rolling-sortino" class="mini-chart"></div></div>
+  <div><h3>Rolling volatility</h3><div id="rolling-volatility" class="mini-chart"></div></div>
+  <div><h3>Rolling beta</h3><div id="rolling-beta" class="mini-chart"></div></div>
+</div></section>
+<section class="panel"><h2>Cumulative log returns</h2><div id="log-returns" class="mini-chart large"></div></section>
+<section id="volatility-section" class="panel" hidden><h2>Volatility-matched returns</h2><div id="volatility-returns" class="mini-chart large"></div></section>
+<section class="panel"><h2>Daily return distribution</h2><svg id="daily-distribution" class="distribution" role="img" aria-label="Daily return distribution"></svg></section>
+<section class="panel"><h2>Monthly return histogram</h2><svg id="monthly-distribution" class="distribution" role="img" aria-label="Monthly return histogram"></svg></section>
+<section id="chart-panel" class="panel chart-panel">
+  <div class="chart-header">
+    <h2 id="chart-title">Account equity and underwater curve</h2>
+    <div class="chart-toolbar" aria-label="Chart controls">
+      <button id="zoom-out" class="button" type="button">Zoom out</button>
+      <button id="zoom-in" class="button" type="button">Zoom in</button>
+      <button id="zoom-fit" class="button" type="button">Fit</button>
+      <button id="fullscreen" class="button" type="button">Fullscreen</button>
+    </div>
+  </div>
+  <div id="chart-info" class="chart-info"></div>
+  <div id="chart" class="chart"></div>
+</section>
+<footer id="report-footer"></footer>
+</main>
+<script id="report-data" type="application/json">$REPORT_DATA</script>
+<script id="chart-data" type="application/json">$CHART_DATA</script>
+<script>$CHART_LIBRARY</script>
+<script>$JAVASCRIPT</script>
+</body>
+</html>

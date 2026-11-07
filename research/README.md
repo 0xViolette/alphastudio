@@ -17,7 +17,7 @@ strategies/           strategy executables
 ../rheo/examples/     executable DSL examples
 ../rheo/test/         semantics test suites
 ../rheo-backtest/     backtesting harness
-analysis/             Python tearsheets and candlestick visualization
+../analytics/         Python accounting, reports, and interactive charts
 emitters/             OHLC emitters
 ```
 
